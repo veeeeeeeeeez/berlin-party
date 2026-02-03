@@ -492,6 +492,63 @@
             scene.add(hBarRight);
         });
 
+        // CAGE Sign - above the stripper cage
+        function createCageSignTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 200;
+            const ctx = canvas.getContext('2d');
+
+            // Purple background
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, 512, 200);
+
+            // Header text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('CAGE', 256, 60);
+
+            // Divider line
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(100, 85);
+            ctx.lineTo(412, 85);
+            ctx.stroke();
+
+            // Body text
+            ctx.font = '32px Arial';
+            ctx.fillText('(dance, baby, dance)', 256, 140);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const cageSignGroup = new THREE.Group();
+        const cageSignTexture = createCageSignTexture();
+        const cageSignPurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+        const cageSignFrontMat = new THREE.MeshBasicMaterial({ map: cageSignTexture });
+
+        const cageSignGeo = new THREE.BoxGeometry(8, 3.5, 0.4);
+        const cageSignMaterials = [
+            cageSignPurpleMat, // right
+            cageSignPurpleMat, // left
+            cageSignPurpleMat, // top
+            cageSignPurpleMat, // bottom
+            cageSignFrontMat,  // front
+            cageSignFrontMat   // back
+        ];
+        const cageSignMesh = new THREE.Mesh(cageSignGeo, cageSignMaterials);
+        cageSignGroup.add(cageSignMesh);
+
+        // Purple glow
+        const cageSignGlow = new THREE.PointLight(0x9333ea, 6, 15);
+        cageSignGlow.position.set(0, 0, 1);
+        cageSignGroup.add(cageSignGlow);
+
+        cageSignGroup.position.set(cageX, 10, cageZ);
+        scene.add(cageSignGroup);
+
         // DJ booth in lounge - darker industrial
         const djTableGeo = new THREE.BoxGeometry(4, 0.8, 2);
         const djTableMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
