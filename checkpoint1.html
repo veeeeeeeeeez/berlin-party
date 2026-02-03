@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERLIN - Kappa Sigma</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #f5f5f5;
+            font-family: 'Courier New', monospace;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #222;
+            z-index: 100;
+        }
+
+        #info-panel h1 {
+            font-size: 2rem;
+            letter-spacing: 0.5rem;
+            font-weight: 300;
+            margin-bottom: 5px;
+        }
+
+        #info-panel p {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        #marker-info {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            padding: 20px 40px;
+            color: #222;
+            display: none;
+            text-align: center;
+            z-index: 100;
+        }
+
+        #marker-info.visible {
+            display: block;
+        }
+
+        #marker-info h2 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            letter-spacing: 0.2rem;
+        }
+
+        #marker-info p {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        #marker-info .time {
+            color: #0088aa;
+            font-size: 1rem;
+            margin-top: 8px;
+        }
+
+        #marker-info .narcan {
+            color: #cc3333;
+        }
+
+        #legend {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #666;
+            font-size: 0.75rem;
+            z-index: 100;
+        }
+
+        #legend div {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        #legend .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        #legend .dot.dj {
+            background: #00aacc;
+        }
+
+        #legend .dot.narcan {
+            background: #cc3333;
+        }
+
+        #instructions {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: #888;
+            font-size: 0.7rem;
+            text-align: right;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="info-panel">
+        <h1>BERLIN</h1>
+        <p>KAPPA SIGMA - 1035 CAMPUS</p>
+    </div>
+
+    <div id="marker-info">
+        <h2 id="marker-title"></h2>
+        <p id="marker-location"></p>
+        <p id="marker-detail" class="time"></p>
+    </div>
+
+    <div id="legend">
+        <div><span class="dot dj"></span> DJ Set</div>
+        <div><span class="dot narcan"></span> Narcan Station</div>
+    </div>
+
+    <div id="instructions">
+        Drag to rotate<br>
+        Scroll to zoom<br>
+        Click markers for info
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Configuration - Edit DJ sets and Narcan stations here
+        const CONFIG = {
+            djSets: [
+                {
+                    id: 'dj1',
+                    name: 'DJ SET 1',
+                    location: 'Backyard Tent',
+                    time: '10:00 PM - 12:00 AM',
+                    position: { x: 18, y: 5, z: 15 }
+                },
+                {
+                    id: 'dj2',
+                    name: 'DJ SET 2',
+                    location: 'Lounge',
+                    time: '12:00 AM - 2:00 AM',
+                    position: { x: -10, y: 5, z: 10 }
+                }
+            ],
+            narcanStations: [
+                {
+                    id: 'narcan1',
+                    name: 'NARCAN STATION',
+                    location: 'Main House',
+                    detail: 'Ask staff for assistance',
+                    position: { x: 10, y: 3, z: -18 }
+                }
+            ]
+        };
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(55, 45, 55);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 15;
+        controls.maxDistance = 120;
+        controls.maxPolarAngle = Math.PI / 2.1;
+
+        // Materials
+        const wallMaterial = new THREE.MeshStandardMaterial({
+            color: 0xaaaaaa,
+            roughness: 0.8,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide
+        });
+
+        const floorMaterial = new THREE.MeshStandardMaterial({
+            color: 0xcccccc,
+            roughness: 0.9,
+        });
+
+        const roofMaterial = new THREE.MeshStandardMaterial({
+            color: 0x999999,
+            roughness: 0.8,
+            transparent: true,
+            opacity: 0.4,
+        });
+
+        const loungeMaterial = new THREE.MeshStandardMaterial({
+            color: 0x666666,
+            roughness: 0.7,
+        });
+
+        const metalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x333333,
+            roughness: 0.3,
+            metalness: 0.8,
+        });
+
+        const blackMetalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            roughness: 0.4,
+            metalness: 0.7,
+        });
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(150, 150);
+        const groundMat = new THREE.MeshStandardMaterial({
+            color: 0xe8e8e8,
+            roughness: 1
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // ============================================
+        // LAYOUT: T-shaped house with turf to the RIGHT
+        //
+        // BASE WALL = horizontal bar at top (runs along X-axis)
+        // SIDE WALL = vertical stem extending down (runs along Z-axis)
+        // TURF = to the RIGHT of the side wall
+        // ============================================
+
+        // Side wall (vertical stem with lounge/cage) - runs along Z-axis
+        const sideWidth = 16;   // narrow dimension (X)
+        const sideDepth = 40;   // long dimension (Z) - extends down
+        const sideHeight = 12;  // TALLER
+        const sideX = -10;      // positioned to the left
+        const sideZ = 10;       // extends downward
+
+        // Turf - to the RIGHT of the side wall
+        const turfWidth = 28;   // X dimension
+        const turfDepth = sideDepth;  // same length as side wall
+        const turfX = sideX + sideWidth/2 + turfWidth/2;  // RIGHT of side wall
+        const turfZ = sideZ;    // aligned with side wall
+
+        // Base wall (horizontal bar at top) - T-shape: extends right to turf, juts left a bit
+        const baseWidth = sideWidth + turfWidth + 20;   // spans: left overhang + side wall + turf + right margin
+        const baseDepth = 14;   // thickness of the bar
+        const baseHeight = 12; // TALLER
+        const baseX = turfX + turfWidth/2 - baseWidth/2;  // right edge flush with fence
+        const baseZ = sideZ - sideDepth/2 - baseDepth/2;  // above/behind
+
+        // ============================================
+        // TURF AREA
+        // ============================================
+        const turfGeometry = new THREE.PlaneGeometry(turfWidth, turfDepth);
+        const turfMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2d6a2f,
+            roughness: 0.8
+        });
+        const turf = new THREE.Mesh(turfGeometry, turfMaterial);
+        turf.rotation.x = -Math.PI / 2;
+        turf.position.set(turfX, 0.02, turfZ);
+        turf.receiveShadow = true;
+        scene.add(turf);
+
+        // ============================================
+        // SIDE SEGMENT (Lounge with cage) - along TOP of turf
+        // ============================================
+
+        // Floor
+        const sideFloorGeo = new THREE.BoxGeometry(sideWidth, 0.3, sideDepth);
+        const sideFloor = new THREE.Mesh(sideFloorGeo, floorMaterial);
+        sideFloor.position.set(sideX, 0.15, sideZ);
+        sideFloor.receiveShadow = true;
+        scene.add(sideFloor);
+
+        // Walls
+        // Back wall (far from turf)
+        const sideBackWallGeo = new THREE.BoxGeometry(sideWidth, sideHeight, 0.2);
+        const sideBackWall = new THREE.Mesh(sideBackWallGeo, wallMaterial);
+        sideBackWall.position.set(sideX, sideHeight/2, sideZ - sideDepth/2);
+        scene.add(sideBackWall);
+
+        // Front wall (toward turf)
+        const sideFrontWallGeo = new THREE.BoxGeometry(sideWidth, sideHeight, 0.2);
+        const sideFrontWall = new THREE.Mesh(sideFrontWallGeo, wallMaterial);
+        sideFrontWall.position.set(sideX, sideHeight/2, sideZ + sideDepth/2);
+        scene.add(sideFrontWall);
+
+        // Right wall
+        const sideRightWallGeo = new THREE.BoxGeometry(0.2, sideHeight, sideDepth);
+        const sideRightWall = new THREE.Mesh(sideRightWallGeo, wallMaterial);
+        sideRightWall.position.set(sideX + sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideRightWall);
+
+        // Left wall
+        const sideLeftWallGeo = new THREE.BoxGeometry(0.2, sideHeight, sideDepth);
+        const sideLeftWall = new THREE.Mesh(sideLeftWallGeo, wallMaterial);
+        sideLeftWall.position.set(sideX - sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideLeftWall);
+
+        // Roof
+        const sideRoofGeo = new THREE.BoxGeometry(sideWidth, 0.2, sideDepth);
+        const sideRoof = new THREE.Mesh(sideRoofGeo, roofMaterial);
+        sideRoof.position.set(sideX, sideHeight, sideZ);
+        scene.add(sideRoof);
+
+        // ============================================
+        // LOUNGE INTERIOR (inside side wall segment)
+        // ============================================
+        const loungeX = sideX;
+        const loungeZ = sideZ;
+
+        // Lounge floor (inside side wall)
+        const loungeFloorGeo = new THREE.BoxGeometry(sideWidth - 2, 0.3, sideDepth - 4);
+        const loungeFloor = new THREE.Mesh(loungeFloorGeo, loungeMaterial);
+        loungeFloor.position.set(sideX, 0.45, sideZ);
+        scene.add(loungeFloor);
+
+        // ============================================
+        // BLACK RECTANGULAR CAGE WITH BARS
+        // ============================================
+        const cageWidth = 5;
+        const cageDepth = 4;
+        const cageHeight = 6;
+        const cageX = loungeX;
+        const cageZ = loungeZ - 10;
+
+        // Cage base platform
+        const cageBaseGeo = new THREE.BoxGeometry(cageWidth, 0.3, cageDepth);
+        const cageBase = new THREE.Mesh(cageBaseGeo, blackMetalMaterial);
+        cageBase.position.set(cageX, 0.6, cageZ);
+        scene.add(cageBase);
+
+        // Cage top frame
+        const cageTopGeo = new THREE.BoxGeometry(cageWidth, 0.15, cageDepth);
+        const cageTop = new THREE.Mesh(cageTopGeo, blackMetalMaterial);
+        cageTop.position.set(cageX, cageHeight, cageZ);
+        scene.add(cageTop);
+
+        // Cage corner posts
+        const cornerPostGeo = new THREE.BoxGeometry(0.15, cageHeight, 0.15);
+        [
+            [-cageWidth/2 + 0.075, -cageDepth/2 + 0.075],
+            [cageWidth/2 - 0.075, -cageDepth/2 + 0.075],
+            [-cageWidth/2 + 0.075, cageDepth/2 - 0.075],
+            [cageWidth/2 - 0.075, cageDepth/2 - 0.075]
+        ].forEach(([dx, dz]) => {
+            const post = new THREE.Mesh(cornerPostGeo, blackMetalMaterial);
+            post.position.set(cageX + dx, cageHeight/2 + 0.45, cageZ + dz);
+            scene.add(post);
+        });
+
+        // Cage vertical bars
+        const barGeo = new THREE.CylinderGeometry(0.05, 0.05, cageHeight - 0.5);
+        const numBarsWidth = 7;
+        for (let i = 1; i < numBarsWidth; i++) {
+            const x = cageX - cageWidth/2 + (i * cageWidth / numBarsWidth);
+            const frontBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            frontBar.position.set(x, cageHeight/2 + 0.5, cageZ - cageDepth/2);
+            scene.add(frontBar);
+            const backBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            backBar.position.set(x, cageHeight/2 + 0.5, cageZ + cageDepth/2);
+            scene.add(backBar);
+        }
+
+        const numBarsDepth = 5;
+        for (let i = 1; i < numBarsDepth; i++) {
+            const z = cageZ - cageDepth/2 + (i * cageDepth / numBarsDepth);
+            const leftBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            leftBar.position.set(cageX - cageWidth/2, cageHeight/2 + 0.5, z);
+            scene.add(leftBar);
+            const rightBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            rightBar.position.set(cageX + cageWidth/2, cageHeight/2 + 0.5, z);
+            scene.add(rightBar);
+        }
+
+        // Horizontal bars around cage
+        [2, 4, cageHeight - 0.3].forEach(h => {
+            const hBarFBGeo = new THREE.CylinderGeometry(0.04, 0.04, cageWidth);
+            const hBarFront = new THREE.Mesh(hBarFBGeo, blackMetalMaterial);
+            hBarFront.rotation.z = Math.PI/2;
+            hBarFront.position.set(cageX, h + 0.5, cageZ - cageDepth/2);
+            scene.add(hBarFront);
+            const hBarBack = new THREE.Mesh(hBarFBGeo, blackMetalMaterial);
+            hBarBack.rotation.z = Math.PI/2;
+            hBarBack.position.set(cageX, h + 0.5, cageZ + cageDepth/2);
+            scene.add(hBarBack);
+
+            const hBarSideGeo = new THREE.CylinderGeometry(0.04, 0.04, cageDepth);
+            const hBarLeft = new THREE.Mesh(hBarSideGeo, blackMetalMaterial);
+            hBarLeft.rotation.x = Math.PI/2;
+            hBarLeft.position.set(cageX - cageWidth/2, h + 0.5, cageZ);
+            scene.add(hBarLeft);
+            const hBarRight = new THREE.Mesh(hBarSideGeo, blackMetalMaterial);
+            hBarRight.rotation.x = Math.PI/2;
+            hBarRight.position.set(cageX + cageWidth/2, h + 0.5, cageZ);
+            scene.add(hBarRight);
+        });
+
+        // DJ booth in lounge
+        const djTableGeo = new THREE.BoxGeometry(4, 0.8, 2);
+        const djTableMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const djTable = new THREE.Mesh(djTableGeo, djTableMat);
+        djTable.position.set(loungeX, 1.2, loungeZ + 10);
+        scene.add(djTable);
+
+        const deckGeo = new THREE.BoxGeometry(3, 0.3, 1.5);
+        const deckMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const deckLounge = new THREE.Mesh(deckGeo, deckMat);
+        deckLounge.position.set(loungeX, 1.75, loungeZ + 10);
+        scene.add(deckLounge);
+
+        // ============================================
+        // BASE SEGMENT - runs down RIGHT side of turf
+        // ============================================
+
+        // Floor
+        const baseFloorGeo = new THREE.BoxGeometry(baseWidth, 0.3, baseDepth);
+        const baseFloor = new THREE.Mesh(baseFloorGeo, floorMaterial);
+        baseFloor.position.set(baseX, 0.15, baseZ);
+        baseFloor.receiveShadow = true;
+        scene.add(baseFloor);
+
+        // Front wall (bottom/far edge)
+        const baseFrontWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const baseFrontWall = new THREE.Mesh(baseFrontWallGeo, wallMaterial);
+        baseFrontWall.position.set(baseX, baseHeight/2, baseZ + baseDepth/2);
+        scene.add(baseFrontWall);
+
+        // Back wall (top edge, toward side segment)
+        const baseBackWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const baseBackWall = new THREE.Mesh(baseBackWallGeo, wallMaterial);
+        baseBackWall.position.set(baseX, baseHeight/2, baseZ - baseDepth/2);
+        scene.add(baseBackWall);
+
+        // Left wall (facing turf)
+        const baseLeftWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const baseLeftWall = new THREE.Mesh(baseLeftWallGeo, wallMaterial);
+        baseLeftWall.position.set(baseX - baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseLeftWall);
+
+        // Right wall
+        const baseRightWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const baseRightWall = new THREE.Mesh(baseRightWallGeo, wallMaterial);
+        baseRightWall.position.set(baseX + baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseRightWall);
+
+        // Roof
+        const baseRoofGeo = new THREE.BoxGeometry(baseWidth, 0.2, baseDepth);
+        const baseRoof = new THREE.Mesh(baseRoofGeo, roofMaterial);
+        baseRoof.position.set(baseX, baseHeight, baseZ);
+        scene.add(baseRoof);
+
+        // Narcan station inside base segment
+        const narcanBoxGeo = new THREE.BoxGeometry(2, 3, 0.5);
+        const narcanBoxMat = new THREE.MeshStandardMaterial({ color: 0xcc3333 });
+        const narcanBox = new THREE.Mesh(narcanBoxGeo, narcanBoxMat);
+        narcanBox.position.set(baseX + 5, 1.8, baseZ);
+        scene.add(narcanBox);
+
+        const crossMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, 0.1), crossMat);
+        crossV.position.set(baseX + 5, 1.8, baseZ + 0.3);
+        scene.add(crossV);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.1), crossMat);
+        crossH.position.set(baseX + 5, 1.8, baseZ + 0.3);
+        scene.add(crossH);
+
+        // ============================================
+        // WHITE TENT - Flat canopy laying on top of poles
+        // On the turf, to the left of the side wall
+        // ============================================
+        const tentGroup = new THREE.Group();
+        const tentLength = turfDepth - 10; // along Z axis
+        const tentWidthSize = turfWidth - 6; // along X axis
+        const tentPeakHeight = 4;
+        const tentBaseHeight = 7;
+
+        // Create tent canopy as a proper roof shape using BufferGeometry
+        // Peak runs along Z axis (length), slopes down on X axis (width)
+        const canopyVertices = new Float32Array([
+            // Left slope (2 triangles)
+            -tentWidthSize/2, tentBaseHeight, -tentLength/2,  // bottom left front
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,   // bottom left back
+
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,   // bottom left back
+
+            // Right slope (2 triangles)
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,   // bottom right front
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,   // bottom right front
+            tentWidthSize/2, tentBaseHeight, tentLength/2,    // bottom right back
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+        ]);
+
+        const canopyGeometry = new THREE.BufferGeometry();
+        canopyGeometry.setAttribute('position', new THREE.BufferAttribute(canopyVertices, 3));
+        canopyGeometry.computeVertexNormals();
+
+        const tentMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.3,
+            side: THREE.DoubleSide
+        });
+        const tentCanopy = new THREE.Mesh(canopyGeometry, tentMaterial);
+        tentCanopy.castShadow = true;
+        tentGroup.add(tentCanopy);
+
+        // Tent poles along both sides
+        const tentPoleGeometry = new THREE.CylinderGeometry(0.12, 0.12, tentBaseHeight);
+        const tentPoleMaterial = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.4 });
+
+        const poleOffsetX = tentWidthSize/2 - 0.5;
+        const numPolesAlongLength = 5;
+        for (let i = 0; i < numPolesAlongLength; i++) {
+            const pz = -tentLength/2 + 2 + i * ((tentLength - 4) / (numPolesAlongLength - 1));
+            // Left pole
+            const leftPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            leftPole.position.set(-poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(leftPole);
+            // Right pole
+            const rightPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            rightPole.position.set(poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(rightPole);
+        }
+
+        tentGroup.position.set(turfX, 0, turfZ);
+        scene.add(tentGroup);
+
+        // ============================================
+        // DJ STAGE - Taller, on left side of tent (toward side wall)
+        // ============================================
+        const stageGroup = new THREE.Group();
+
+        // Stage platform - TALLER and on the left side (toward side wall)
+        const stagePlatformHeight = 1.8;
+        const stagePlatformGeo = new THREE.BoxGeometry(5, stagePlatformHeight, 10);
+        const stagePlatformMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const stagePlatform = new THREE.Mesh(stagePlatformGeo, stagePlatformMat);
+        stagePlatform.position.set(-tentWidthSize/2 + 3.5, stagePlatformHeight/2, 5);
+        stageGroup.add(stagePlatform);
+
+        // DJ Table on elevated stage
+        const djStageTableGeo = new THREE.BoxGeometry(4, 0.9, 2);
+        const djStageTableMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const djStageTable = new THREE.Mesh(djStageTableGeo, djStageTableMat);
+        djStageTable.position.set(-tentWidthSize/2 + 3.5, stagePlatformHeight + 0.45, 5);
+        stageGroup.add(djStageTable);
+
+        // DJ Deck
+        const djDeckGeo = new THREE.BoxGeometry(3.5, 0.25, 1.5);
+        const djDeckMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+        const djDeck = new THREE.Mesh(djDeckGeo, djDeckMat);
+        djDeck.position.set(-tentWidthSize/2 + 3.5, stagePlatformHeight + 1, 5);
+        stageGroup.add(djDeck);
+
+        // Turntables
+        const turntableGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32);
+        const turntableMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+        [-0.8, 0.8].forEach(offsetX => {
+            const turntable = new THREE.Mesh(turntableGeo, turntableMat);
+            turntable.position.set(-tentWidthSize/2 + 3.5 + offsetX, stagePlatformHeight + 1.18, 5);
+            stageGroup.add(turntable);
+        });
+
+        // Mixer
+        const mixerGeo = new THREE.BoxGeometry(0.8, 0.2, 0.6);
+        const mixerMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const mixer = new THREE.Mesh(mixerGeo, mixerMat);
+        mixer.position.set(-tentWidthSize/2 + 3.5, stagePlatformHeight + 1.2, 5);
+        stageGroup.add(mixer);
+
+        stageGroup.position.set(turfX, 0, turfZ);
+        scene.add(stageGroup);
+
+        // ============================================
+        // TALL METAL BAR FENCING
+        // ============================================
+        const fenceHeight = 7;
+
+        function createMetalFence(length, height = fenceHeight) {
+            const group = new THREE.Group();
+
+            const postGeo = new THREE.BoxGeometry(0.2, height, 0.2);
+            const numPosts = Math.ceil(length / 4);
+            for (let i = 0; i <= numPosts; i++) {
+                const post = new THREE.Mesh(postGeo, metalMaterial);
+                post.position.set(i * (length / numPosts) - length/2, height/2, 0);
+                group.add(post);
+
+                const spikeGeo = new THREE.ConeGeometry(0.12, 0.4, 8);
+                const spike = new THREE.Mesh(spikeGeo, metalMaterial);
+                spike.position.set(i * (length / numPosts) - length/2, height + 0.2, 0);
+                group.add(spike);
+            }
+
+            const barGeo = new THREE.CylinderGeometry(0.05, 0.05, height - 0.5);
+            const barsPerSection = 4;
+            for (let i = 0; i < numPosts; i++) {
+                const sectionStart = i * (length / numPosts) - length/2;
+                const sectionWidth = length / numPosts;
+                for (let j = 1; j <= barsPerSection; j++) {
+                    const bar = new THREE.Mesh(barGeo, metalMaterial);
+                    bar.position.set(sectionStart + (j * sectionWidth / (barsPerSection + 1)), height/2, 0);
+                    group.add(bar);
+
+                    const smallSpike = new THREE.ConeGeometry(0.06, 0.3, 6);
+                    const spike = new THREE.Mesh(smallSpike, metalMaterial);
+                    spike.position.set(sectionStart + (j * sectionWidth / (barsPerSection + 1)), height + 0.15, 0);
+                    group.add(spike);
+                }
+            }
+
+            [height * 0.2, height * 0.5, height * 0.8].forEach(h => {
+                const hBarGeo = new THREE.CylinderGeometry(0.04, 0.04, length);
+                const hBar = new THREE.Mesh(hBarGeo, metalMaterial);
+                hBar.rotation.z = Math.PI / 2;
+                hBar.position.set(0, h, 0);
+                group.add(hBar);
+            });
+
+            return group;
+        }
+
+        // Right fence (along right edge of turf)
+        const rightFenceLength = turfDepth + 4;
+        const rightFence = createMetalFence(rightFenceLength);
+        rightFence.rotation.y = Math.PI / 2;
+        rightFence.position.set(turfX + turfWidth/2 + 0.5, 0, turfZ);
+        scene.add(rightFence);
+
+        // Bottom fence (along bottom edge of turf) - with gap for gate
+        const bottomFenceLength = turfWidth - 10;
+        const bottomFence = createMetalFence(bottomFenceLength);
+        bottomFence.position.set(turfX + 5, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(bottomFence);
+
+        // NO fence on base side (bottom) - removed
+
+        // ============================================
+        // METAL BAR GATE
+        // ============================================
+        const gateGroup = new THREE.Group();
+        const gateWidth = 8;
+        const gateHeightSize = 7;
+
+        const frameThickness = 0.25;
+        const topBarGeo = new THREE.BoxGeometry(gateWidth + 0.5, frameThickness, frameThickness);
+        const topBar = new THREE.Mesh(topBarGeo, metalMaterial);
+        topBar.position.set(0, gateHeightSize, 0);
+        gateGroup.add(topBar);
+
+        const sidePostGeo = new THREE.BoxGeometry(frameThickness, gateHeightSize + 0.5, frameThickness);
+        [-gateWidth/2, gateWidth/2].forEach(x => {
+            const post = new THREE.Mesh(sidePostGeo, metalMaterial);
+            post.position.set(x, gateHeightSize/2, 0);
+            gateGroup.add(post);
+        });
+
+        const gateBarGeo = new THREE.CylinderGeometry(0.06, 0.06, gateHeightSize);
+        const numGateBars = 10;
+        for (let i = 1; i < numGateBars; i++) {
+            const bar = new THREE.Mesh(gateBarGeo, metalMaterial);
+            bar.position.set(-gateWidth/2 + (i * gateWidth / numGateBars), gateHeightSize/2, 0);
+            gateGroup.add(bar);
+        }
+
+        const hGateBarGeo = new THREE.CylinderGeometry(0.05, 0.05, gateWidth);
+        [gateHeightSize * 0.25, gateHeightSize * 0.5, gateHeightSize * 0.75].forEach(y => {
+            const hBar = new THREE.Mesh(hGateBarGeo, metalMaterial);
+            hBar.rotation.z = Math.PI / 2;
+            hBar.position.set(0, y, 0);
+            gateGroup.add(hBar);
+        });
+
+        const spikeGeo = new THREE.ConeGeometry(0.1, 0.5, 8);
+        for (let i = 0; i <= numGateBars; i++) {
+            const spike = new THREE.Mesh(spikeGeo, metalMaterial);
+            spike.position.set(-gateWidth/2 + (i * gateWidth / numGateBars), gateHeightSize + 0.35, 0);
+            gateGroup.add(spike);
+        }
+
+        // Gate at bottom of turf, between side wall and turf
+        gateGroup.position.set(turfX - turfWidth/2 + 4, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(gateGroup);
+
+        // ============================================
+        // INTERACTIVE MARKERS
+        // ============================================
+        const markers = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function createMarker(config, type) {
+            const color = type === 'dj' ? 0x00aacc : 0xcc3333;
+
+            const markerGroup = new THREE.Group();
+
+            const glowGeometry = new THREE.SphereGeometry(1.2, 16, 16);
+            const glowMaterial = new THREE.MeshBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.3
+            });
+            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            markerGroup.add(glow);
+
+            const sphereGeometry = new THREE.SphereGeometry(0.6, 16, 16);
+            const sphereMaterial = new THREE.MeshBasicMaterial({ color: color });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            markerGroup.add(sphere);
+
+            const lineGeometry = new THREE.CylinderGeometry(0.08, 0.08, config.position.y);
+            const lineMaterial = new THREE.MeshBasicMaterial({ color: color });
+            const line = new THREE.Mesh(lineGeometry, lineMaterial);
+            line.position.y = -config.position.y / 2;
+            markerGroup.add(line);
+
+            markerGroup.position.set(config.position.x, config.position.y, config.position.z);
+            markerGroup.userData = { ...config, type };
+
+            scene.add(markerGroup);
+            markers.push(markerGroup);
+
+            return markerGroup;
+        }
+
+        CONFIG.djSets.forEach(dj => createMarker(dj, 'dj'));
+        CONFIG.narcanStations.forEach(station => createMarker(station, 'narcan'));
+
+        // ============================================
+        // LIGHTING
+        // ============================================
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+        mainLight.position.set(30, 50, 30);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 150;
+        mainLight.shadow.camera.left = -70;
+        mainLight.shadow.camera.right = 70;
+        mainLight.shadow.camera.top = 70;
+        mainLight.shadow.camera.bottom = -70;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        fillLight.position.set(-30, 30, -30);
+        scene.add(fillLight);
+
+        // ============================================
+        // INTERACTION
+        // ============================================
+        const markerInfo = document.getElementById('marker-info');
+        const markerTitle = document.getElementById('marker-title');
+        const markerLocation = document.getElementById('marker-location');
+        const markerDetail = document.getElementById('marker-detail');
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const markerMeshes = markers.flatMap(m => m.children);
+            const intersects = raycaster.intersectObjects(markerMeshes);
+
+            if (intersects.length > 0) {
+                const marker = intersects[0].object.parent;
+                const data = marker.userData;
+
+                markerTitle.textContent = data.name;
+                markerLocation.textContent = data.location;
+                markerDetail.textContent = data.time || data.detail || '';
+                markerDetail.className = data.type === 'narcan' ? 'narcan' : 'time';
+                markerInfo.classList.add('visible');
+            } else {
+                markerInfo.classList.remove('visible');
+            }
+        }
+
+        window.addEventListener('click', onMouseClick);
+
+        // ============================================
+        // ANIMATION
+        // ============================================
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+
+            markers.forEach(marker => {
+                const glow = marker.children[0];
+                glow.scale.setScalar(1 + Math.sin(time * 2) * 0.2);
+                glow.material.opacity = 0.2 + Math.sin(time * 2) * 0.1;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

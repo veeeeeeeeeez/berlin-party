@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERLIN - Kappa Sigma</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        #info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #ddccaa;
+            z-index: 100;
+        }
+
+        #info-panel h1 {
+            font-size: 2.5rem;
+            letter-spacing: 0.6rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #c0c0c0;
+            text-shadow: 0 0 20px rgba(192, 192, 192, 0.6), 0 0 40px rgba(150, 180, 220, 0.4);
+            font-family: 'Helvetica Neue', 'Arial', sans-serif;
+        }
+
+        #info-panel p {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        #marker-info {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 15, 12, 0.95);
+            border: 1px solid #554433;
+            padding: 20px 40px;
+            color: #eee;
+            display: none;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 0 0 15px rgba(255, 200, 150, 0.15);
+        }
+
+        #marker-info.visible {
+            display: block;
+        }
+
+        #marker-info h2 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            letter-spacing: 0.2rem;
+        }
+
+        #marker-info p {
+            font-size: 0.9rem;
+            color: #999;
+        }
+
+        #marker-info .time {
+            color: #c0c0c0;
+            font-size: 1rem;
+            margin-top: 8px;
+        }
+
+        #marker-info .narcan {
+            color: #cc3333;
+        }
+
+        #instructions {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: #555;
+            font-size: 0.7rem;
+            text-align: right;
+            z-index: 100;
+        }
+
+        #kappa-sigma {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #c0c0c0;
+            font-size: 2.8rem;
+            font-weight: 500;
+            letter-spacing: 0.5rem;
+            z-index: 100;
+            text-shadow: 0 0 20px rgba(192, 192, 192, 0.6), 0 0 40px rgba(150, 180, 220, 0.4);
+            font-family: 'Helvetica Neue', 'Arial', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="info-panel">
+        <h1>BERLIN</h1>
+        <p>KAPPA SIGMA - 1035 CAMPUS</p>
+    </div>
+
+    <div id="kappa-sigma">K&Sigma;</div>
+
+    <div id="marker-info">
+        <h2 id="marker-title"></h2>
+        <p id="marker-location"></p>
+        <p id="marker-detail" class="time"></p>
+    </div>
+
+
+    <div id="instructions">
+        Drag to rotate<br>
+        Scroll to zoom<br>
+        Click signs for DJ lineups
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Configuration - Edit DJ sets and Narcan stations here
+        const CONFIG = {
+            djSets: [
+                {
+                    id: 'dj1',
+                    name: 'DJ SET 1',
+                    location: 'Backyard Tent',
+                    time: '10:00 PM - 12:00 AM',
+                    position: { x: 18, y: 5, z: 15 }
+                },
+                {
+                    id: 'dj2',
+                    name: 'DJ SET 2',
+                    location: 'Lounge',
+                    time: '12:00 AM - 2:00 AM',
+                    position: { x: -10, y: 5, z: 10 }
+                }
+            ],
+            narcanStations: [
+                {
+                    id: 'narcan1',
+                    name: 'NARCAN STATION',
+                    location: 'Main House',
+                    detail: 'Ask staff for assistance',
+                    position: { x: 10, y: 3, z: -18 }
+                }
+            ]
+        };
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+        scene.fog = new THREE.Fog(0x0a0a0a, 50, 150);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(30, 35, 50);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 15;
+        controls.maxDistance = 120;
+        controls.maxPolarAngle = Math.PI; // Allow looking up at the scene
+        controls.minPolarAngle = 0; // Allow full rotation
+
+        // Materials - Dark industrial
+        const wallMaterial = new THREE.MeshStandardMaterial({
+            color: 0x151515,
+            roughness: 0.9,
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide
+        });
+
+        const floorMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a0a0a,
+            roughness: 0.7,
+        });
+
+        const roofMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a0a0a,
+            roughness: 0.9,
+            transparent: true,
+            opacity: 0.6,
+        });
+
+        const loungeMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a0a0a,
+            roughness: 0.7,
+        });
+
+        const metalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            roughness: 0.4,
+            metalness: 0.8,
+        });
+
+        const blackMetalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a0a0a,
+            roughness: 0.5,
+            metalness: 0.6,
+        });
+
+        // No ground - floating in space
+
+        // ============================================
+        // LAYOUT: T-shaped house with turf to the RIGHT
+        //
+        // BASE WALL = horizontal bar at top (runs along X-axis)
+        // SIDE WALL = vertical stem extending down (runs along Z-axis)
+        // TURF = to the RIGHT of the side wall
+        // ============================================
+
+        // Side wall (vertical stem with lounge/cage) - runs along Z-axis
+        const sideWidth = 16;   // narrow dimension (X)
+        const sideDepth = 40;   // long dimension (Z) - extends down
+        const sideHeight = 12;  // TALLER
+        const sideX = -10;      // positioned to the left
+        const sideZ = 10;       // extends downward
+
+        // Turf - to the RIGHT of the side wall
+        const turfWidth = 28;   // X dimension
+        const turfDepth = sideDepth;  // same length as side wall
+        const turfX = sideX + sideWidth/2 + turfWidth/2;  // RIGHT of side wall
+        const turfZ = sideZ;    // aligned with side wall
+
+        // Base wall (horizontal bar at top) - T-shape: extends right to turf, juts left a bit
+        const baseWidth = sideWidth + turfWidth + 20;   // spans: left overhang + side wall + turf + right margin
+        const baseDepth = 14;   // thickness of the bar
+        const baseHeight = 12; // TALLER
+        const baseX = turfX + turfWidth/2 - baseWidth/2;  // right edge flush with fence
+        const baseZ = sideZ - sideDepth/2 - baseDepth/2;  // above/behind
+
+        // ============================================
+        // TURF AREA - Dark forest green with grass texture
+        // ============================================
+        function createGrassTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Very dark forest green base
+            ctx.fillStyle = '#050d05';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Add grass blade variations - darker
+            for (let i = 0; i < 8000; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const length = 3 + Math.random() * 8;
+                const angle = -Math.PI/2 + (Math.random() - 0.5) * 0.6;
+
+                // Varying shades of very dark green
+                const shade = Math.floor(Math.random() * 25);
+                const g = 15 + shade;
+                ctx.strokeStyle = `rgb(${3 + Math.floor(shade/5)}, ${g}, ${3 + Math.floor(shade/5)})`;
+                ctx.lineWidth = 0.5 + Math.random() * 1;
+
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+                ctx.stroke();
+            }
+
+            // Add some darker patches for depth
+            for (let i = 0; i < 60; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const radius = 5 + Math.random() * 25;
+                ctx.fillStyle = `rgba(2, 8, 2, ${0.3 + Math.random() * 0.4})`;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 6);
+            return texture;
+        }
+
+        const turfGeometry = new THREE.PlaneGeometry(turfWidth, turfDepth);
+        const turfMaterial = new THREE.MeshStandardMaterial({
+            map: createGrassTexture(),
+            color: 0x040a04,
+            roughness: 0.95
+        });
+        const turf = new THREE.Mesh(turfGeometry, turfMaterial);
+        turf.rotation.x = -Math.PI / 2;
+        turf.position.set(turfX, 0.02, turfZ);
+        turf.receiveShadow = true;
+        scene.add(turf);
+
+        // Single purple underglow light beneath turf
+        const purpleUnderglow = new THREE.PointLight(0x9333ea, 10, 60);
+        purpleUnderglow.position.set(turfX, -3, turfZ);
+        scene.add(purpleUnderglow);
+
+        // ============================================
+        // SIDE SEGMENT (Lounge with cage) - along TOP of turf
+        // ============================================
+
+        // Floor
+        const sideFloorGeo = new THREE.BoxGeometry(sideWidth, 0.3, sideDepth);
+        const sideFloor = new THREE.Mesh(sideFloorGeo, floorMaterial);
+        sideFloor.position.set(sideX, 0.15, sideZ);
+        sideFloor.receiveShadow = true;
+        scene.add(sideFloor);
+
+        // Walls
+        // Back wall (far from turf)
+        const sideBackWallGeo = new THREE.BoxGeometry(sideWidth, sideHeight, 0.2);
+        const sideBackWall = new THREE.Mesh(sideBackWallGeo, wallMaterial);
+        sideBackWall.position.set(sideX, sideHeight/2, sideZ - sideDepth/2);
+        scene.add(sideBackWall);
+
+        // Front wall (toward turf)
+        const sideFrontWallGeo = new THREE.BoxGeometry(sideWidth, sideHeight, 0.2);
+        const sideFrontWall = new THREE.Mesh(sideFrontWallGeo, wallMaterial);
+        sideFrontWall.position.set(sideX, sideHeight/2, sideZ + sideDepth/2);
+        scene.add(sideFrontWall);
+
+        // Right wall
+        const sideRightWallGeo = new THREE.BoxGeometry(0.2, sideHeight, sideDepth);
+        const sideRightWall = new THREE.Mesh(sideRightWallGeo, wallMaterial);
+        sideRightWall.position.set(sideX + sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideRightWall);
+
+        // Left wall
+        const sideLeftWallGeo = new THREE.BoxGeometry(0.2, sideHeight, sideDepth);
+        const sideLeftWall = new THREE.Mesh(sideLeftWallGeo, wallMaterial);
+        sideLeftWall.position.set(sideX - sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideLeftWall);
+
+        // Roof
+        const sideRoofGeo = new THREE.BoxGeometry(sideWidth, 0.2, sideDepth);
+        const sideRoof = new THREE.Mesh(sideRoofGeo, roofMaterial);
+        sideRoof.position.set(sideX, sideHeight, sideZ);
+        scene.add(sideRoof);
+
+        // ============================================
+        // LOUNGE INTERIOR (inside side wall segment)
+        // ============================================
+        const loungeX = sideX;
+        const loungeZ = sideZ;
+
+        // Lounge floor (inside side wall)
+        const loungeFloorGeo = new THREE.BoxGeometry(sideWidth - 2, 0.3, sideDepth - 4);
+        const loungeFloor = new THREE.Mesh(loungeFloorGeo, loungeMaterial);
+        loungeFloor.position.set(sideX, 0.45, sideZ);
+        scene.add(loungeFloor);
+
+        // ============================================
+        // BLACK RECTANGULAR CAGE WITH BARS
+        // ============================================
+        const cageWidth = 5;
+        const cageDepth = 4;
+        const cageHeight = 6;
+        const cageX = loungeX;
+        const cageZ = loungeZ - 10;
+
+        // Cage base platform
+        const cageBaseGeo = new THREE.BoxGeometry(cageWidth, 0.3, cageDepth);
+        const cageBase = new THREE.Mesh(cageBaseGeo, blackMetalMaterial);
+        cageBase.position.set(cageX, 0.6, cageZ);
+        scene.add(cageBase);
+
+        // Cage top frame
+        const cageTopGeo = new THREE.BoxGeometry(cageWidth, 0.15, cageDepth);
+        const cageTop = new THREE.Mesh(cageTopGeo, blackMetalMaterial);
+        cageTop.position.set(cageX, cageHeight, cageZ);
+        scene.add(cageTop);
+
+        // Cage corner posts
+        const cornerPostGeo = new THREE.BoxGeometry(0.15, cageHeight, 0.15);
+        [
+            [-cageWidth/2 + 0.075, -cageDepth/2 + 0.075],
+            [cageWidth/2 - 0.075, -cageDepth/2 + 0.075],
+            [-cageWidth/2 + 0.075, cageDepth/2 - 0.075],
+            [cageWidth/2 - 0.075, cageDepth/2 - 0.075]
+        ].forEach(([dx, dz]) => {
+            const post = new THREE.Mesh(cornerPostGeo, blackMetalMaterial);
+            post.position.set(cageX + dx, cageHeight/2 + 0.45, cageZ + dz);
+            scene.add(post);
+        });
+
+        // Cage vertical bars
+        const barGeo = new THREE.CylinderGeometry(0.05, 0.05, cageHeight - 0.5);
+        const numBarsWidth = 7;
+        for (let i = 1; i < numBarsWidth; i++) {
+            const x = cageX - cageWidth/2 + (i * cageWidth / numBarsWidth);
+            const frontBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            frontBar.position.set(x, cageHeight/2 + 0.5, cageZ - cageDepth/2);
+            scene.add(frontBar);
+            const backBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            backBar.position.set(x, cageHeight/2 + 0.5, cageZ + cageDepth/2);
+            scene.add(backBar);
+        }
+
+        const numBarsDepth = 5;
+        for (let i = 1; i < numBarsDepth; i++) {
+            const z = cageZ - cageDepth/2 + (i * cageDepth / numBarsDepth);
+            const leftBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            leftBar.position.set(cageX - cageWidth/2, cageHeight/2 + 0.5, z);
+            scene.add(leftBar);
+            const rightBar = new THREE.Mesh(barGeo, blackMetalMaterial);
+            rightBar.position.set(cageX + cageWidth/2, cageHeight/2 + 0.5, z);
+            scene.add(rightBar);
+        }
+
+        // Horizontal bars around cage
+        [2, 4, cageHeight - 0.3].forEach(h => {
+            const hBarFBGeo = new THREE.CylinderGeometry(0.04, 0.04, cageWidth);
+            const hBarFront = new THREE.Mesh(hBarFBGeo, blackMetalMaterial);
+            hBarFront.rotation.z = Math.PI/2;
+            hBarFront.position.set(cageX, h + 0.5, cageZ - cageDepth/2);
+            scene.add(hBarFront);
+            const hBarBack = new THREE.Mesh(hBarFBGeo, blackMetalMaterial);
+            hBarBack.rotation.z = Math.PI/2;
+            hBarBack.position.set(cageX, h + 0.5, cageZ + cageDepth/2);
+            scene.add(hBarBack);
+
+            const hBarSideGeo = new THREE.CylinderGeometry(0.04, 0.04, cageDepth);
+            const hBarLeft = new THREE.Mesh(hBarSideGeo, blackMetalMaterial);
+            hBarLeft.rotation.x = Math.PI/2;
+            hBarLeft.position.set(cageX - cageWidth/2, h + 0.5, cageZ);
+            scene.add(hBarLeft);
+            const hBarRight = new THREE.Mesh(hBarSideGeo, blackMetalMaterial);
+            hBarRight.rotation.x = Math.PI/2;
+            hBarRight.position.set(cageX + cageWidth/2, h + 0.5, cageZ);
+            scene.add(hBarRight);
+        });
+
+        // DJ booth in lounge - darker industrial
+        const djTableGeo = new THREE.BoxGeometry(4, 0.8, 2);
+        const djTableMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
+        const djTable = new THREE.Mesh(djTableGeo, djTableMat);
+        djTable.position.set(loungeX, 1.2, loungeZ + 10);
+        scene.add(djTable);
+
+        const deckGeo = new THREE.BoxGeometry(3, 0.3, 1.5);
+        const deckMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
+        const deckLounge = new THREE.Mesh(deckGeo, deckMat);
+        deckLounge.position.set(loungeX, 1.75, loungeZ + 10);
+        scene.add(deckLounge);
+
+        // ============================================
+        // BASE SEGMENT - runs down RIGHT side of turf
+        // ============================================
+
+        // Floor
+        const baseFloorGeo = new THREE.BoxGeometry(baseWidth, 0.3, baseDepth);
+        const baseFloor = new THREE.Mesh(baseFloorGeo, floorMaterial);
+        baseFloor.position.set(baseX, 0.15, baseZ);
+        baseFloor.receiveShadow = true;
+        scene.add(baseFloor);
+
+        // Front wall (bottom/far edge)
+        const baseFrontWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const baseFrontWall = new THREE.Mesh(baseFrontWallGeo, wallMaterial);
+        baseFrontWall.position.set(baseX, baseHeight/2, baseZ + baseDepth/2);
+        scene.add(baseFrontWall);
+
+        // Back wall (top edge, toward side segment)
+        const baseBackWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const baseBackWall = new THREE.Mesh(baseBackWallGeo, wallMaterial);
+        baseBackWall.position.set(baseX, baseHeight/2, baseZ - baseDepth/2);
+        scene.add(baseBackWall);
+
+        // Left wall (facing turf)
+        const baseLeftWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const baseLeftWall = new THREE.Mesh(baseLeftWallGeo, wallMaterial);
+        baseLeftWall.position.set(baseX - baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseLeftWall);
+
+        // Right wall
+        const baseRightWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const baseRightWall = new THREE.Mesh(baseRightWallGeo, wallMaterial);
+        baseRightWall.position.set(baseX + baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseRightWall);
+
+        // Roof
+        const baseRoofGeo = new THREE.BoxGeometry(baseWidth, 0.2, baseDepth);
+        const baseRoof = new THREE.Mesh(baseRoofGeo, roofMaterial);
+        baseRoof.position.set(baseX, baseHeight, baseZ);
+        scene.add(baseRoof);
+
+        // ============================================
+        // BASEMENT LEVEL - Below base segment
+        // ============================================
+        const basementY = -baseHeight; // Basement floor level
+
+        // Basement Floor
+        const basementFloorGeo = new THREE.BoxGeometry(baseWidth, 0.3, baseDepth);
+        const basementFloor = new THREE.Mesh(basementFloorGeo, floorMaterial);
+        basementFloor.position.set(baseX, basementY + 0.15, baseZ);
+        basementFloor.receiveShadow = true;
+        scene.add(basementFloor);
+
+        // Basement Front wall
+        const basementFrontWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const basementFrontWall = new THREE.Mesh(basementFrontWallGeo, wallMaterial);
+        basementFrontWall.position.set(baseX, basementY + baseHeight/2, baseZ + baseDepth/2);
+        scene.add(basementFrontWall);
+
+        // Basement Back wall
+        const basementBackWallGeo = new THREE.BoxGeometry(baseWidth, baseHeight, 0.2);
+        const basementBackWall = new THREE.Mesh(basementBackWallGeo, wallMaterial);
+        basementBackWall.position.set(baseX, basementY + baseHeight/2, baseZ - baseDepth/2);
+        scene.add(basementBackWall);
+
+        // Basement Left wall
+        const basementLeftWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const basementLeftWall = new THREE.Mesh(basementLeftWallGeo, wallMaterial);
+        basementLeftWall.position.set(baseX - baseWidth/2, basementY + baseHeight/2, baseZ);
+        scene.add(basementLeftWall);
+
+        // Basement Right wall
+        const basementRightWallGeo = new THREE.BoxGeometry(0.2, baseHeight, baseDepth);
+        const basementRightWall = new THREE.Mesh(basementRightWallGeo, wallMaterial);
+        basementRightWall.position.set(baseX + baseWidth/2, basementY + baseHeight/2, baseZ);
+        scene.add(basementRightWall);
+
+        // Basement interior light
+        const basementLight1 = new THREE.PointLight(0xffffff, 12, 60);
+        basementLight1.position.set(baseX - 20, basementY + 10, baseZ);
+        scene.add(basementLight1);
+        const basementLight2 = new THREE.PointLight(0xffffff, 12, 60);
+        basementLight2.position.set(baseX, basementY + 10, baseZ);
+        scene.add(basementLight2);
+        const basementLight3 = new THREE.PointLight(0xffffff, 12, 60);
+        basementLight3.position.set(baseX + 20, basementY + 10, baseZ);
+        scene.add(basementLight3);
+
+        // ============================================
+        // TRAP ROOM - End of basement closer to turf (at the edge)
+        // ============================================
+        const trapRoomX = baseX + baseWidth/2 - 5; // Right at the end of hallway
+        const trapRoomZ = baseZ;
+        const trapRoomY = basementY + 0.3;
+
+        // Couch material
+        const couchMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8 });
+        const couchCushionMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+
+        // Create couch function
+        function createCouch(x, y, z, rotation = 0) {
+            const couchGroup = new THREE.Group();
+
+            // Base
+            const base = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 1.5), couchMat);
+            base.position.y = 0.4;
+            couchGroup.add(base);
+
+            // Back
+            const back = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.3), couchMat);
+            back.position.set(0, 1.1, -0.6);
+            couchGroup.add(back);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(0.3, 0.8, 1.5);
+            const leftArm = new THREE.Mesh(armGeo, couchMat);
+            leftArm.position.set(-1.85, 0.9, 0);
+            couchGroup.add(leftArm);
+            const rightArm = new THREE.Mesh(armGeo, couchMat);
+            rightArm.position.set(1.85, 0.9, 0);
+            couchGroup.add(rightArm);
+
+            // Cushions
+            for (let i = -1; i <= 1; i++) {
+                const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.25, 1.2), couchCushionMat);
+                cushion.position.set(i * 1.3, 0.9, 0);
+                couchGroup.add(cushion);
+            }
+
+            couchGroup.position.set(x, y, z);
+            couchGroup.rotation.y = rotation;
+            scene.add(couchGroup);
+        }
+
+        // All 3 couches facing inward toward the table
+        // TV is on the back wall, one couch against the end wall
+        createCouch(trapRoomX - 1, trapRoomY, trapRoomZ, -Math.PI / 2); // End wall couch, facing inward (left)
+        createCouch(trapRoomX - 6, trapRoomY, trapRoomZ + 4, Math.PI); // Front couch, facing inward (back)
+        createCouch(trapRoomX - 6, trapRoomY, trapRoomZ - 4, 0); // Back couch (near TV), facing inward (front)
+
+        // TV mounted higher on the back wall
+        const tvScreenMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.2, metalness: 0.3 });
+
+        // TV Screen - mounted on back wall, higher up
+        const tvScreen = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 0.2), tvScreenMat);
+        tvScreen.position.set(trapRoomX - 6, trapRoomY + 5, trapRoomZ - 6);
+        scene.add(tvScreen);
+
+        // TV Frame
+        const tvFrameMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
+        const tvFrame = new THREE.Mesh(new THREE.BoxGeometry(5.3, 3.3, 0.15), tvFrameMat);
+        tvFrame.position.set(trapRoomX - 6, trapRoomY + 5, trapRoomZ - 6.05);
+        scene.add(tvFrame);
+
+        // ============================================
+        // TRAP TABLE with bongs and weed bowls
+        // ============================================
+        const trapTableMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 });
+
+        // Coffee table in center of couch arrangement (rotated 90 degrees)
+        const trapTable = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 2), trapTableMat);
+        trapTable.position.set(trapRoomX - 4, trapRoomY + 0.6, trapRoomZ);
+        scene.add(trapTable);
+
+        // Table legs
+        const trapLegGeo = new THREE.BoxGeometry(0.15, 0.6, 0.15);
+        [[-1.3, -0.8], [1.3, -0.8], [-1.3, 0.8], [1.3, 0.8]].forEach(([dx, dz]) => {
+            const leg = new THREE.Mesh(trapLegGeo, trapTableMat);
+            leg.position.set(trapRoomX - 4 + dx, trapRoomY + 0.3, trapRoomZ + dz);
+            scene.add(leg);
+        });
+
+        // Bong materials
+        const glassMat = new THREE.MeshStandardMaterial({
+            color: 0x88ccff,
+            transparent: true,
+            opacity: 0.6,
+            roughness: 0.1,
+            metalness: 0.1
+        });
+        const greenGlassMat = new THREE.MeshStandardMaterial({
+            color: 0x44aa44,
+            transparent: true,
+            opacity: 0.6,
+            roughness: 0.1
+        });
+        const bowlMetalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
+
+        // Create bong function (bigger size)
+        function createBong(x, y, z, glassMaterial) {
+            const bongGroup = new THREE.Group();
+
+            // Base
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 0.2, 16), glassMaterial);
+            base.position.y = 0.1;
+            bongGroup.add(base);
+
+            // Main tube
+            const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.0, 16), glassMaterial);
+            tube.position.y = 0.7;
+            bongGroup.add(tube);
+
+            // Neck
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.4, 16), glassMaterial);
+            neck.position.y = 1.4;
+            bongGroup.add(neck);
+
+            // Mouthpiece
+            const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 8, 16), glassMaterial);
+            mouth.rotation.x = Math.PI / 2;
+            mouth.position.y = 1.65;
+            bongGroup.add(mouth);
+
+            // Downstem
+            const downstem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4, 8), bowlMetalMat);
+            downstem.rotation.z = Math.PI / 4;
+            downstem.position.set(0.16, 0.5, 0);
+            bongGroup.add(downstem);
+
+            // Bowl piece
+            const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.12, 8), bowlMetalMat);
+            bowl.position.set(0.3, 0.7, 0);
+            bongGroup.add(bowl);
+
+            bongGroup.position.set(x, y, z);
+            scene.add(bongGroup);
+        }
+
+        // Place bongs on table
+        createBong(trapRoomX - 4.5, trapRoomY + 0.65, trapRoomZ - 0.6, glassMat);
+        createBong(trapRoomX - 3.5, trapRoomY + 0.65, trapRoomZ + 0.8, greenGlassMat);
+
+        // Weed bowl materials
+        const weedBowlMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6 });
+        const weedMat = new THREE.MeshStandardMaterial({ color: 0x2d5a1d, roughness: 0.9 });
+
+        // Create weed bowl function
+        function createWeedBowl(x, y, z) {
+            const bowlGroup = new THREE.Group();
+
+            // Bowl
+            const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.08, 16), weedBowlMat);
+            bowl.position.y = 0.04;
+            bowlGroup.add(bowl);
+
+            // Weed pile (lumpy green)
+            for (let i = 0; i < 8; i++) {
+                const nugSize = 0.03 + Math.random() * 0.04;
+                const nug = new THREE.Mesh(new THREE.SphereGeometry(nugSize, 6, 6), weedMat);
+                const angle = (i / 8) * Math.PI * 2;
+                const r = Math.random() * 0.08;
+                nug.position.set(Math.cos(angle) * r, 0.08 + Math.random() * 0.03, Math.sin(angle) * r);
+                bowlGroup.add(nug);
+            }
+            // Center pile
+            for (let i = 0; i < 5; i++) {
+                const nugSize = 0.025 + Math.random() * 0.035;
+                const nug = new THREE.Mesh(new THREE.SphereGeometry(nugSize, 6, 6), weedMat);
+                nug.position.set((Math.random() - 0.5) * 0.06, 0.1 + i * 0.02, (Math.random() - 0.5) * 0.06);
+                bowlGroup.add(nug);
+            }
+
+            bowlGroup.position.set(x, y, z);
+            scene.add(bowlGroup);
+        }
+
+        // Place weed bowls on table
+        createWeedBowl(trapRoomX - 3.2, trapRoomY + 0.65, trapRoomZ - 0.5);
+        createWeedBowl(trapRoomX - 4.8, trapRoomY + 0.65, trapRoomZ + 0.5);
+
+        // Narcan station - white cross box
+        const narcanSignX = baseX + 5;
+        const narcanSignZ = baseZ;
+
+        const narcanBoxGeo = new THREE.BoxGeometry(2, 3, 0.5);
+        const narcanBoxMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const narcanBox = new THREE.Mesh(narcanBoxGeo, narcanBoxMat);
+        narcanBox.position.set(narcanSignX, 1.8, narcanSignZ);
+        scene.add(narcanBox);
+
+        const crossMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, 0.1), crossMat);
+        crossV.position.set(narcanSignX, 1.8, narcanSignZ + 0.3);
+        scene.add(crossV);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.1), crossMat);
+        crossH.position.set(narcanSignX, 1.8, narcanSignZ + 0.3);
+        scene.add(crossH);
+
+        // ============================================
+        // WHITE TENT - Flat canopy laying on top of poles
+        // On the turf, to the left of the side wall
+        // ============================================
+        const tentGroup = new THREE.Group();
+        const tentLength = turfDepth - 10; // along Z axis
+        const tentWidthSize = turfWidth - 6; // along X axis
+        const tentPeakHeight = 4;
+        const tentBaseHeight = 7;
+
+        // Create tent canopy as a proper roof shape using BufferGeometry
+        // Peak runs along Z axis (length), slopes down on X axis (width)
+        const canopyVertices = new Float32Array([
+            // Left slope (2 triangles)
+            -tentWidthSize/2, tentBaseHeight, -tentLength/2,  // bottom left front
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,   // bottom left back
+
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,   // bottom left back
+
+            // Right slope (2 triangles)
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2, // peak front
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,   // bottom right front
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,   // bottom right front
+            tentWidthSize/2, tentBaseHeight, tentLength/2,    // bottom right back
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,  // peak back
+        ]);
+
+        const canopyGeometry = new THREE.BufferGeometry();
+        canopyGeometry.setAttribute('position', new THREE.BufferAttribute(canopyVertices, 3));
+        canopyGeometry.computeVertexNormals();
+
+        const tentMaterial = new THREE.MeshStandardMaterial({
+            color: 0x080808,
+            roughness: 0.7,
+            side: THREE.DoubleSide
+        });
+        const tentCanopy = new THREE.Mesh(canopyGeometry, tentMaterial);
+        tentCanopy.castShadow = true;
+        tentGroup.add(tentCanopy);
+
+        // Tent poles along both sides - dark industrial
+        const tentPoleGeometry = new THREE.CylinderGeometry(0.12, 0.12, tentBaseHeight);
+        const tentPoleMaterial = new THREE.MeshStandardMaterial({ color: 0x080808, metalness: 0.7 });
+
+        const poleOffsetX = tentWidthSize/2 - 0.5;
+        const numPolesAlongLength = 5;
+        for (let i = 0; i < numPolesAlongLength; i++) {
+            const pz = -tentLength/2 + 2 + i * ((tentLength - 4) / (numPolesAlongLength - 1));
+            // Left pole
+            const leftPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            leftPole.position.set(-poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(leftPole);
+            // Right pole
+            const rightPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            rightPole.position.set(poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(rightPole);
+        }
+
+        tentGroup.position.set(turfX, 0, turfZ);
+        scene.add(tentGroup);
+
+        // ============================================
+        // DJ STAGE - Taller, on left side of tent (toward side wall)
+        // ============================================
+        const stageGroup = new THREE.Group();
+
+        // Stage platform - CENTERED at top edge of tent (toward base wall)
+        const stagePlatformHeight = 1.8;
+        const stageZ = -tentLength/2 + 6;  // top edge of tent
+        const stageX = 0;  // CENTERED in tent
+        const stagePlatformGeo = new THREE.BoxGeometry(8, stagePlatformHeight, 10);
+        const stagePlatformMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
+        const stagePlatform = new THREE.Mesh(stagePlatformGeo, stagePlatformMat);
+        stagePlatform.position.set(stageX, stagePlatformHeight/2, stageZ);
+        stageGroup.add(stagePlatform);
+
+        // DJ Table on elevated stage - industrial black
+        const djStageTableGeo = new THREE.BoxGeometry(6, 0.9, 2.5);
+        const djStageTableMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.5 });
+        const djStageTable = new THREE.Mesh(djStageTableGeo, djStageTableMat);
+        djStageTable.position.set(stageX, stagePlatformHeight + 0.45, stageZ);
+        stageGroup.add(djStageTable);
+
+        // DJ Deck - matte black
+        const djDeckGeo = new THREE.BoxGeometry(5, 0.25, 1.8);
+        const djDeckMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
+        const djDeck = new THREE.Mesh(djDeckGeo, djDeckMat);
+        djDeck.position.set(stageX, stagePlatformHeight + 1, stageZ);
+        stageGroup.add(djDeck);
+
+        // Turntables - darker
+        const turntableGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 32);
+        const turntableMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6 });
+        [-1.2, 1.2].forEach(offsetX => {
+            const turntable = new THREE.Mesh(turntableGeo, turntableMat);
+            turntable.position.set(stageX + offsetX, stagePlatformHeight + 1.18, stageZ);
+            stageGroup.add(turntable);
+        });
+
+        // Mixer
+        const mixerGeo = new THREE.BoxGeometry(1, 0.2, 0.8);
+        const mixerMat = new THREE.MeshStandardMaterial({ color: 0x0f0f0f });
+        const mixer = new THREE.Mesh(mixerGeo, mixerMat);
+        mixer.position.set(stageX, stagePlatformHeight + 1.2, stageZ);
+        stageGroup.add(mixer);
+
+        stageGroup.position.set(turfX, 0, turfZ);
+        scene.add(stageGroup);
+
+        // ============================================
+        // TALL METAL BAR FENCING
+        // ============================================
+        const fenceHeight = 7;
+
+        function createMetalFence(length, height = fenceHeight) {
+            const group = new THREE.Group();
+
+            const postGeo = new THREE.BoxGeometry(0.2, height, 0.2);
+            const numPosts = Math.ceil(length / 4);
+            for (let i = 0; i <= numPosts; i++) {
+                const post = new THREE.Mesh(postGeo, metalMaterial);
+                post.position.set(i * (length / numPosts) - length/2, height/2, 0);
+                group.add(post);
+
+                const spikeGeo = new THREE.ConeGeometry(0.12, 0.4, 8);
+                const spike = new THREE.Mesh(spikeGeo, metalMaterial);
+                spike.position.set(i * (length / numPosts) - length/2, height + 0.2, 0);
+                group.add(spike);
+            }
+
+            const barGeo = new THREE.CylinderGeometry(0.05, 0.05, height - 0.5);
+            const barsPerSection = 4;
+            for (let i = 0; i < numPosts; i++) {
+                const sectionStart = i * (length / numPosts) - length/2;
+                const sectionWidth = length / numPosts;
+                for (let j = 1; j <= barsPerSection; j++) {
+                    const bar = new THREE.Mesh(barGeo, metalMaterial);
+                    bar.position.set(sectionStart + (j * sectionWidth / (barsPerSection + 1)), height/2, 0);
+                    group.add(bar);
+
+                    const smallSpike = new THREE.ConeGeometry(0.06, 0.3, 6);
+                    const spike = new THREE.Mesh(smallSpike, metalMaterial);
+                    spike.position.set(sectionStart + (j * sectionWidth / (barsPerSection + 1)), height + 0.15, 0);
+                    group.add(spike);
+                }
+            }
+
+            [height * 0.2, height * 0.5, height * 0.8].forEach(h => {
+                const hBarGeo = new THREE.CylinderGeometry(0.04, 0.04, length);
+                const hBar = new THREE.Mesh(hBarGeo, metalMaterial);
+                hBar.rotation.z = Math.PI / 2;
+                hBar.position.set(0, h, 0);
+                group.add(hBar);
+            });
+
+            return group;
+        }
+
+        // Right fence (along right edge of turf)
+        const rightFenceLength = turfDepth + 4;
+        const rightFence = createMetalFence(rightFenceLength);
+        rightFence.rotation.y = Math.PI / 2;
+        rightFence.position.set(turfX + turfWidth/2 + 0.5, 0, turfZ);
+        scene.add(rightFence);
+
+        // Bottom fence (along bottom edge of turf) - with gap for gate
+        const bottomFenceLength = turfWidth - 10;
+        const bottomFence = createMetalFence(bottomFenceLength);
+        bottomFence.position.set(turfX + 5, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(bottomFence);
+
+        // NO fence on base side (bottom) - removed
+
+        // ============================================
+        // METAL BAR GATE
+        // ============================================
+        const gateGroup = new THREE.Group();
+        const gateWidth = 8;
+        const gateHeightSize = 7;
+
+        const frameThickness = 0.25;
+        const topBarGeo = new THREE.BoxGeometry(gateWidth + 0.5, frameThickness, frameThickness);
+        const topBar = new THREE.Mesh(topBarGeo, metalMaterial);
+        topBar.position.set(0, gateHeightSize, 0);
+        gateGroup.add(topBar);
+
+        const sidePostGeo = new THREE.BoxGeometry(frameThickness, gateHeightSize + 0.5, frameThickness);
+        [-gateWidth/2, gateWidth/2].forEach(x => {
+            const post = new THREE.Mesh(sidePostGeo, metalMaterial);
+            post.position.set(x, gateHeightSize/2, 0);
+            gateGroup.add(post);
+        });
+
+        const gateBarGeo = new THREE.CylinderGeometry(0.06, 0.06, gateHeightSize);
+        const numGateBars = 10;
+        for (let i = 1; i < numGateBars; i++) {
+            const bar = new THREE.Mesh(gateBarGeo, metalMaterial);
+            bar.position.set(-gateWidth/2 + (i * gateWidth / numGateBars), gateHeightSize/2, 0);
+            gateGroup.add(bar);
+        }
+
+        const hGateBarGeo = new THREE.CylinderGeometry(0.05, 0.05, gateWidth);
+        [gateHeightSize * 0.25, gateHeightSize * 0.5, gateHeightSize * 0.75].forEach(y => {
+            const hBar = new THREE.Mesh(hGateBarGeo, metalMaterial);
+            hBar.rotation.z = Math.PI / 2;
+            hBar.position.set(0, y, 0);
+            gateGroup.add(hBar);
+        });
+
+        const spikeGeo = new THREE.ConeGeometry(0.1, 0.5, 8);
+        for (let i = 0; i <= numGateBars; i++) {
+            const spike = new THREE.Mesh(spikeGeo, metalMaterial);
+            spike.position.set(-gateWidth/2 + (i * gateWidth / numGateBars), gateHeightSize + 0.35, 0);
+            gateGroup.add(spike);
+        }
+
+        // Gate at bottom of turf, between side wall and turf
+        gateGroup.position.set(turfX - turfWidth/2 + 4, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(gateGroup);
+
+        // ============================================
+        // ENTRANCE SIGN - Above the gate (purple)
+        // ============================================
+        function createEntranceSignTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            // Purple background
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, 512, 128);
+
+            // White text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 64px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ENTRANCE', 256, 64);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const entranceSignGroup = new THREE.Group();
+        const entranceTexture = createEntranceSignTexture();
+        const entranceSignMat = new THREE.MeshBasicMaterial({ map: entranceTexture });
+        const entrancePurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+
+        // Sign board
+        const entranceSignGeo = new THREE.BoxGeometry(6, 1.5, 0.2);
+        const entranceSignMaterials = [
+            entrancePurpleMat,   // right
+            entrancePurpleMat,   // left
+            entrancePurpleMat,   // top
+            entrancePurpleMat,   // bottom
+            entranceSignMat,     // front
+            entranceSignMat      // back
+        ];
+        const entranceSign = new THREE.Mesh(entranceSignGeo, entranceSignMaterials);
+        entranceSignGroup.add(entranceSign);
+
+        // Purple glow light for entrance sign
+        const entranceGlow = new THREE.PointLight(0x9333ea, 5, 15);
+        entranceGlow.position.set(0, 0, 1);
+        entranceSignGroup.add(entranceGlow);
+
+        // Position above gate
+        entranceSignGroup.position.set(turfX - turfWidth/2 + 4, gateHeightSize + 1.5, turfZ + turfDepth/2 + 0.5);
+        scene.add(entranceSignGroup);
+
+        // ============================================
+        // BEER CANS - Scattered in piles
+        // ============================================
+        const canColors = [
+            new THREE.MeshStandardMaterial({ color: 0xcc0000, metalness: 0.7, roughness: 0.3 }), // red
+            new THREE.MeshStandardMaterial({ color: 0x0044aa, metalness: 0.7, roughness: 0.3 }), // blue
+            new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.7, roughness: 0.3 }), // gold
+            new THREE.MeshStandardMaterial({ color: 0x228822, metalness: 0.7, roughness: 0.3 }), // green
+            new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 }), // silver
+        ];
+        const canTopMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
+
+        // Create a beer can
+        function createBeerCan(x, y, z, fallen = false) {
+            const canGroup = new THREE.Group();
+            const mat = canColors[Math.floor(Math.random() * canColors.length)];
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12), mat);
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.02, 12), canTopMat);
+            top.position.y = 0.18;
+            const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 12), canTopMat);
+            bottom.position.y = -0.18;
+            canGroup.add(body);
+            canGroup.add(top);
+            canGroup.add(bottom);
+
+            if (fallen) {
+                canGroup.rotation.x = Math.PI / 2;
+                canGroup.rotation.z = Math.random() * Math.PI * 2;
+                canGroup.position.set(x, y + 0.12, z);
+            } else {
+                canGroup.position.set(x, y + 0.175, z);
+            }
+            scene.add(canGroup);
+        }
+
+        // Create a pile of cans at a location
+        function createCanPile(centerX, centerY, centerZ, count = 8) {
+            for (let i = 0; i < count; i++) {
+                const offsetX = (Math.random() - 0.5) * 1.2;
+                const offsetZ = (Math.random() - 0.5) * 1.2;
+                const fallen = Math.random() > 0.3; // 70% fallen
+                createBeerCan(centerX + offsetX, centerY, centerZ + offsetZ, fallen);
+            }
+        }
+
+        // Turf area - multiple piles
+        createCanPile(turfX - 6, 0, turfZ + 12, 10);
+        createCanPile(turfX + 5, 0, turfZ + 8, 8);
+        createCanPile(turfX + 8, 0, turfZ - 5, 12);
+        createCanPile(turfX - 3, 0, turfZ - 2, 7);
+        createCanPile(turfX + 2, 0, turfZ + 15, 9);
+        createCanPile(turfX - 8, 0, turfZ + 5, 6);
+
+        // Near gate
+        createCanPile(turfX - 10, 0, turfZ + 18, 8);
+
+        // Near DJ booth outside
+        createCanPile(turfX - 2, 0, turfZ - 12, 6);
+
+        // ============================================
+        // CIGARETTE SOUP TABLE - Left of narcan
+        // ============================================
+        const tableMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7 });
+        const bowlMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4 });
+        const cigMat = new THREE.MeshStandardMaterial({ color: 0xf5e6d3, roughness: 0.9 });
+        const cigFilterMat = new THREE.MeshStandardMaterial({ color: 0xcc9966, roughness: 0.8 });
+
+        const cigTableX = narcanSignX - 8;
+        const cigTableZ = narcanSignZ;
+        const cigTable = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.5), tableMat);
+        cigTable.position.set(cigTableX, 1, cigTableZ);
+        scene.add(cigTable);
+        for (let dx of [-1, 1]) {
+            for (let dz of [-0.6, 0.6]) {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.1), tableMat);
+                leg.position.set(cigTableX + dx, 0.5, cigTableZ + dz);
+                scene.add(leg);
+            }
+        }
+
+        const bowlOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.5, 0.5, 24), bowlMat);
+        bowlOuter.position.set(cigTableX, 1.3, cigTableZ);
+        scene.add(bowlOuter);
+
+        function createCigarette(x, y, z, rotX = 0, rotY = 0, rotZ = 0) {
+            const cigGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.35, 6), cigMat);
+            body.rotation.z = Math.PI / 2;
+            const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.08, 6), cigFilterMat);
+            filter.rotation.z = Math.PI / 2;
+            filter.position.x = -0.2;
+            cigGroup.add(body);
+            cigGroup.add(filter);
+            cigGroup.position.set(x, y, z);
+            cigGroup.rotation.set(rotX, rotY, rotZ);
+            scene.add(cigGroup);
+        }
+
+        for (let layer = 0; layer < 5; layer++) {
+            const radius = 0.6 - layer * 0.1;
+            const count = 12 - layer * 2;
+            const y = 1.35 + layer * 0.08;
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+                const r = radius * (0.5 + Math.random() * 0.5);
+                const x = cigTableX + Math.cos(angle) * r;
+                const z = cigTableZ + Math.sin(angle) * r;
+                createCigarette(x, y, z, Math.random() * 0.5, angle + Math.random(), Math.random() * 0.3);
+            }
+        }
+        for (let i = 0; i < 15; i++) {
+            const x = cigTableX + (Math.random() - 0.5) * 0.4;
+            const z = cigTableZ + (Math.random() - 0.5) * 0.4;
+            const y = 1.7 + Math.random() * 0.2;
+            createCigarette(x, y, z, Math.random() * 0.8, Math.random() * Math.PI * 2, Math.random() * 0.8);
+        }
+
+        // ============================================
+        // JAEGER TABLE - Left of cigarette table
+        // ============================================
+        const jaegerTableX = cigTableX - 5;
+        const jaegerTableZ = narcanSignZ;
+        const jaegerTable = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.5), tableMat);
+        jaegerTable.position.set(jaegerTableX, 1, jaegerTableZ);
+        scene.add(jaegerTable);
+        for (let dx of [-1, 1]) {
+            for (let dz of [-0.6, 0.6]) {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.1), tableMat);
+                leg.position.set(jaegerTableX + dx, 0.5, jaegerTableZ + dz);
+                scene.add(leg);
+            }
+        }
+
+        const jaegerBottleMat = new THREE.MeshStandardMaterial({ color: 0x1a3d1a, roughness: 0.3 });
+        const jaegerLabelMat = new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.5 });
+        const jaegerCapMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 });
+
+        function createJaegerBottle(x, y, z) {
+            const bottleGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.5, 12), jaegerBottleMat);
+            const label = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.2, 12), jaegerLabelMat);
+            label.position.y = 0.05;
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.15, 10), jaegerBottleMat);
+            neck.position.y = 0.32;
+            const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.06, 10), jaegerCapMat);
+            cap.position.y = 0.42;
+            bottleGroup.add(body);
+            bottleGroup.add(label);
+            bottleGroup.add(neck);
+            bottleGroup.add(cap);
+            bottleGroup.position.set(x, y + 0.25, z);
+            scene.add(bottleGroup);
+        }
+
+        for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 4; col++) {
+                const x = jaegerTableX - 0.7 + col * 0.45 + (Math.random() - 0.5) * 0.1;
+                const z = jaegerTableZ - 0.4 + row * 0.4 + (Math.random() - 0.5) * 0.1;
+                createJaegerBottle(x, 1.05, z);
+            }
+        }
+        createJaegerBottle(jaegerTableX + 0.2, 1.05, jaegerTableZ);
+        createJaegerBottle(jaegerTableX - 0.3, 1.05, jaegerTableZ + 0.2);
+
+        // ============================================
+        // NEON RED 3D SIGNS - Intense glowing rectangular prisms
+        // ============================================
+        const markers = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Create multi-line DJ set texture (purple with white text and header)
+        function createDJSignTexture(header, lines, width = 512, height = 300) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Purple background
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, width, height);
+
+            // Add glow effect
+            ctx.shadowColor = '#9333ea';
+            ctx.shadowBlur = 30;
+
+            // Header text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(header, width/2, 50);
+
+            // Divider line
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(50, 70);
+            ctx.lineTo(width - 50, 70);
+            ctx.stroke();
+
+            // DJ lineup text
+            ctx.font = 'bold 24px Arial';
+            const startY = 105;
+            const lineHeight = (height - startY) / (lines.length + 0.5);
+            lines.forEach((line, i) => {
+                ctx.fillText(line, width/2, startY + lineHeight * (i + 0.5));
+            });
+
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        // Create simple text texture for NARCAN
+        function createSimpleSignTexture(text, width = 512, height = 128) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Purple background
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, width, height);
+
+            // White text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 56px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, width/2, height/2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        // Neon purple material (glowing)
+        const neonPurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+
+        // Create 3D rectangular prism sign - text only on front/back
+        function createDJSign(header, lines, x, y, z, width = 12, height = 6, depth = 1) {
+            const group = new THREE.Group();
+
+            const texture = createDJSignTexture(header, lines, 512, 300);
+
+            // Materials: sides are solid neon purple, front/back have text
+            const materials = [
+                neonPurpleMat, // right - solid purple
+                neonPurpleMat, // left - solid purple
+                neonPurpleMat, // top - solid purple
+                neonPurpleMat, // bottom - solid purple
+                new THREE.MeshBasicMaterial({ map: texture }), // front - text
+                new THREE.MeshBasicMaterial({ map: texture })  // back - text
+            ];
+
+            const boxGeo = new THREE.BoxGeometry(width, height, depth);
+            const sign = new THREE.Mesh(boxGeo, materials);
+            group.add(sign);
+
+            // Multiple intense glow lights - purple
+            const glowLight1 = new THREE.PointLight(0x9333ea, 10, 30);
+            glowLight1.position.set(0, 0, depth);
+            group.add(glowLight1);
+            const glowLight2 = new THREE.PointLight(0x9333ea, 10, 30);
+            glowLight2.position.set(0, 0, -depth);
+            group.add(glowLight2);
+            const glowLight3 = new THREE.PointLight(0x9333ea, 8, 25);
+            glowLight3.position.set(0, 0, 0);
+            group.add(glowLight3);
+
+            group.position.set(x, y, z);
+            scene.add(group);
+            markers.push(group);
+
+            return group;
+        }
+
+        function createNarcanSign(text, x, y, z, width = 6, height = 2, depth = 0.8) {
+            const group = new THREE.Group();
+
+            const texture = createSimpleSignTexture(text, 512, 128);
+
+            const materials = [
+                neonPurpleMat, // right
+                neonPurpleMat, // left
+                neonPurpleMat, // top
+                neonPurpleMat, // bottom
+                new THREE.MeshBasicMaterial({ map: texture }), // front
+                new THREE.MeshBasicMaterial({ map: texture })  // back
+            ];
+
+            const boxGeo = new THREE.BoxGeometry(width, height, depth);
+            const sign = new THREE.Mesh(boxGeo, materials);
+            group.add(sign);
+
+            // Glow lights - purple
+            const glowLight1 = new THREE.PointLight(0x9333ea, 8, 20);
+            glowLight1.position.set(0, 0, depth);
+            group.add(glowLight1);
+            const glowLight2 = new THREE.PointLight(0x9333ea, 8, 20);
+            glowLight2.position.set(0, 0, -depth);
+            group.add(glowLight2);
+
+            group.position.set(x, y, z);
+            scene.add(group);
+            markers.push(group);
+
+            return group;
+        }
+
+        // DJ Sign 1 - OUTSIDE (above tent) - TURF header
+        const outsideLines = [
+            '22:00 - 23:30',
+            'RODIGGER B2B MUSS',
+            '23:30 - 1:00',
+            'VINNY B2B STIGGER'
+        ];
+        const djSign1 = createDJSign('TURF', outsideLines, turfX, tentBaseHeight + tentPeakHeight + 4, turfZ, 14, 7, 1.2);
+        djSign1.userData = {
+            name: 'TURF',
+            location: 'Outside Stage',
+            time: '22:00-23:30: RODIGGER B2B MUSS\n23:30-1:00: VINNY B2B STIGGER'
+        };
+
+        // DJ Sign 2 - INSIDE (lounge) - LOUNGE header
+        const insideLines = [
+            '22:00 - 23:30',
+            'COOCHIE B2B DANNY',
+            '23:30 - 1:00',
+            'WESTON B2B JOUNGER'
+        ];
+        const djSign2 = createDJSign('LOUNGE', insideLines, sideX, 8, sideZ + 12, 12, 6, 1);
+        djSign2.userData = {
+            name: 'LOUNGE',
+            location: 'Inside Stage',
+            time: '22:00-23:30: COOCHIE B2B DANNY\n23:30-1:00: WESTON B2B JOUNGER'
+        };
+
+        // NARCAN Sign - above the white cross box
+        const narcanSign = createNarcanSign('NARCAN', narcanSignX, 5.5, narcanSignZ, 7, 2, 0.8);
+        narcanSign.userData = CONFIG.narcanStations[0];
+
+        // TRAP Sign - above the TV on the back wall
+        const trapSign = createNarcanSign('TRAP', trapRoomX - 6, basementY + 9, trapRoomZ - 6, 6, 2.5, 0.8);
+        trapSign.userData = { name: 'TRAP ROOM', location: 'Basement', detail: 'Chill zone' };
+
+        // ============================================
+        // LIGHTING - Bright outside, dark red building interiors
+        // ============================================
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+
+        // Overhead scene-wide spotlight - like a giant flashlight over everything
+        const overheadSpotlight = new THREE.SpotLight(0xffffff, 100, 200, Math.PI / 3, 0.3, 0.5);
+        overheadSpotlight.position.set(5, 80, 10);
+        scene.add(overheadSpotlight);
+
+        const overheadTarget = new THREE.Object3D();
+        overheadTarget.position.set(5, 0, 10);
+        scene.add(overheadTarget);
+        overheadSpotlight.target = overheadTarget;
+
+        // Additional overhead point light for extra coverage
+        const overheadPoint = new THREE.PointLight(0xffffff, 20, 150);
+        overheadPoint.position.set(5, 50, 10);
+        scene.add(overheadPoint);
+        mainLight.position.set(30, 50, 30);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 150;
+        mainLight.shadow.camera.left = -70;
+        mainLight.shadow.camera.right = 70;
+        mainLight.shadow.camera.top = 70;
+        mainLight.shadow.camera.bottom = -70;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        fillLight.position.set(-30, 40, -20);
+        scene.add(fillLight);
+
+        // ============================================
+        // BUILDING INTERIORS - Purple neon mixed with white
+        // ============================================
+        // Lounge - purple neon overhead lights
+        const loungeOverhead1 = new THREE.PointLight(0x9333ea, 15, 60);
+        loungeOverhead1.position.set(sideX, 10, sideZ - 12);
+        scene.add(loungeOverhead1);
+        const loungeOverhead2 = new THREE.PointLight(0x7c3aed, 15, 60);
+        loungeOverhead2.position.set(sideX, 10, sideZ);
+        scene.add(loungeOverhead2);
+        const loungeOverhead3 = new THREE.PointLight(0x9333ea, 15, 60);
+        loungeOverhead3.position.set(sideX, 10, sideZ + 12);
+        scene.add(loungeOverhead3);
+
+        // Purple accent lights along lounge walls
+        const loungeAccent1 = new THREE.PointLight(0x9333ea, 5, 25);
+        loungeAccent1.position.set(sideX - 6, 2, sideZ - 15);
+        scene.add(loungeAccent1);
+        const loungeAccent2 = new THREE.PointLight(0x7c3aed, 5, 25);
+        loungeAccent2.position.set(sideX + 6, 2, sideZ + 15);
+        scene.add(loungeAccent2);
+
+        // Base building - bright overhead lights
+        const baseOverhead1 = new THREE.PointLight(0xffffff, 12, 60);
+        baseOverhead1.position.set(baseX - 20, 10, baseZ);
+        scene.add(baseOverhead1);
+        const baseOverhead2 = new THREE.PointLight(0xffffff, 12, 60);
+        baseOverhead2.position.set(baseX, 10, baseZ);
+        scene.add(baseOverhead2);
+        const baseOverhead3 = new THREE.PointLight(0xffffff, 12, 60);
+        baseOverhead3.position.set(baseX + 20, 10, baseZ);
+        scene.add(baseOverhead3);
+
+        // ============================================
+        // TENT/TURF - Simple white floodlights
+        // ============================================
+        const tentFlood1 = new THREE.PointLight(0xffffff, 8, 70);
+        tentFlood1.position.set(turfX, 12, turfZ - 10);
+        scene.add(tentFlood1);
+        const tentFlood2 = new THREE.PointLight(0xffffff, 8, 70);
+        tentFlood2.position.set(turfX, 12, turfZ + 10);
+        scene.add(tentFlood2);
+
+        // ============================================
+        // FLASHLIGHT CURSOR - EXTREMELY BRIGHT
+        // ============================================
+        const flashlight = new THREE.SpotLight(0xffffff, 50, 100, Math.PI / 5, 0.2, 0.5);
+        flashlight.position.set(0, 30, 0);
+        scene.add(flashlight);
+
+        const flashlightTarget = new THREE.Object3D();
+        scene.add(flashlightTarget);
+        flashlight.target = flashlightTarget;
+
+        // Additional point lights at cursor for maximum brightness
+        const cursorLight = new THREE.PointLight(0xffffff, 25, 50);
+        scene.add(cursorLight);
+        const cursorLight2 = new THREE.PointLight(0xffffff, 15, 35);
+        scene.add(cursorLight2);
+
+        const flashlightRaycaster = new THREE.Raycaster();
+        const flashlightMouse = new THREE.Vector2();
+
+        function onMouseMove(event) {
+            flashlightMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            flashlightMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            flashlightRaycaster.setFromCamera(flashlightMouse, camera);
+
+            // Create a plane at y=0 to intersect with
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersectPoint = new THREE.Vector3();
+            flashlightRaycaster.ray.intersectPlane(plane, intersectPoint);
+
+            if (intersectPoint) {
+                flashlightTarget.position.copy(intersectPoint);
+                // Position flashlight above the target
+                flashlight.position.set(intersectPoint.x, 20, intersectPoint.z);
+                // Position cursor lights at and near the target
+                cursorLight.position.set(intersectPoint.x, 5, intersectPoint.z);
+                cursorLight2.position.set(intersectPoint.x, 2, intersectPoint.z);
+            }
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+
+        // ============================================
+        // INTERACTION - Click and Hover
+        // ============================================
+        const markerInfo = document.getElementById('marker-info');
+        const markerTitle = document.getElementById('marker-title');
+        const markerLocation = document.getElementById('marker-location');
+        const markerDetail = document.getElementById('marker-detail');
+
+        function showMarkerInfo(marker) {
+            const data = marker.userData;
+            markerTitle.textContent = data.name;
+            markerLocation.textContent = data.location;
+            // Handle multi-line text
+            const detailText = data.time || data.detail || '';
+            markerDetail.innerHTML = detailText.replace(/\n/g, '<br>');
+            markerDetail.className = data.type === 'narcan' ? 'narcan' : 'time';
+            markerInfo.classList.add('visible');
+        }
+
+        function hideMarkerInfo() {
+            markerInfo.classList.remove('visible');
+        }
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const markerMeshes = markers.flatMap(m => m.children);
+            const intersects = raycaster.intersectObjects(markerMeshes);
+
+            if (intersects.length > 0) {
+                const marker = intersects[0].object.parent;
+                showMarkerInfo(marker);
+            } else {
+                hideMarkerInfo();
+            }
+        }
+
+        // Hover functionality
+        function onMouseHover(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            const markerMeshes = markers.flatMap(m => m.children);
+            const intersects = raycaster.intersectObjects(markerMeshes);
+
+            if (intersects.length > 0) {
+                const marker = intersects[0].object.parent;
+                showMarkerInfo(marker);
+                document.body.style.cursor = 'pointer';
+            } else {
+                hideMarkerInfo();
+                document.body.style.cursor = 'crosshair';
+            }
+        }
+
+        window.addEventListener('click', onMouseClick);
+        window.addEventListener('mousemove', onMouseHover);
+
+        // ============================================
+        // ANIMATION
+        // ============================================
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+
+            markers.forEach(marker => {
+                const glow = marker.children[0];
+                glow.scale.setScalar(1 + Math.sin(time * 2) * 0.2);
+                glow.material.opacity = 0.2 + Math.sin(time * 2) * 0.1;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
