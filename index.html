@@ -285,7 +285,7 @@
 
         // Base wall (horizontal bar at top) - T-shape: extends right to turf, juts left a bit
         const baseWidth = sideWidth + turfWidth + 20;   // spans: left overhang + side wall + turf + right margin
-        const baseDepth = 14;   // thickness of the bar
+        const baseDepth = 14;   // thickness of the bar (original)
         const baseHeight = 12; // TALLER
         const baseX = turfX + turfWidth/2 - baseWidth/2;  // right edge flush with fence
         const baseZ = sideZ - sideDepth/2 - baseDepth/2;  // above/behind
@@ -594,7 +594,7 @@
         scene.add(basementLight3);
 
         // ============================================
-        // TRAP ROOM - End of basement closer to turf (at the edge)
+        // TRAP ROOM - End of basement (original position)
         // ============================================
         const trapRoomX = baseX + baseWidth/2 - 5; // Right at the end of hallway
         const trapRoomZ = baseZ;
@@ -775,8 +775,8 @@
         createWeedBowl(trapRoomX - 3.2, trapRoomY + 0.65, trapRoomZ - 0.5);
         createWeedBowl(trapRoomX - 4.8, trapRoomY + 0.65, trapRoomZ + 0.5);
 
-        // Narcan station - white cross box
-        const narcanSignX = baseX + 5;
+        // Narcan station - white cross box (centered in hallway)
+        const narcanSignX = baseX - 15;
         const narcanSignZ = baseZ;
 
         const narcanBoxGeo = new THREE.BoxGeometry(2, 3, 0.5);
@@ -1233,6 +1233,119 @@
         createJaegerBottle(jaegerTableX - 0.3, 1.05, jaegerTableZ + 0.2);
 
         // ============================================
+        // MID AREA - Right side of main hallway (no dividing walls)
+        // ============================================
+        const midRoomZ = baseZ; // Same Z as hallway
+        const midRoomX = baseX + baseWidth/2 - 15; // Right side of hallway
+        const midRoomFloorY = 0.3;
+
+        // Bigger couch function for MID room
+        function createBigCouch(x, y, z, rotation = 0) {
+            const couchGroup = new THREE.Group();
+
+            // Base (bigger)
+            const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 2.2), couchMat);
+            base.position.y = 0.5;
+            couchGroup.add(base);
+
+            // Back (bigger)
+            const back = new THREE.Mesh(new THREE.BoxGeometry(6, 1.6, 0.4), couchMat);
+            back.position.set(0, 1.3, -0.9);
+            couchGroup.add(back);
+
+            // Arms (bigger)
+            const armGeo = new THREE.BoxGeometry(0.4, 1, 2.2);
+            const leftArm = new THREE.Mesh(armGeo, couchMat);
+            leftArm.position.set(-2.8, 1, 0);
+            couchGroup.add(leftArm);
+            const rightArm = new THREE.Mesh(armGeo, couchMat);
+            rightArm.position.set(2.8, 1, 0);
+            couchGroup.add(rightArm);
+
+            // Cushions (bigger)
+            for (let i = -1; i <= 1; i++) {
+                const cushion = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.3, 1.8), couchCushionMat);
+                cushion.position.set(i * 1.9, 1.1, 0);
+                couchGroup.add(cushion);
+            }
+
+            couchGroup.position.set(x, y, z);
+            couchGroup.rotation.y = rotation;
+            scene.add(couchGroup);
+        }
+
+        // Coffee tables in MID room (bigger)
+        function createMidTable(x, y, z) {
+            const table = new THREE.Mesh(new THREE.BoxGeometry(4, 0.15, 2.5), tableMat);
+            table.position.set(x, y + 0.8, z);
+            scene.add(table);
+            // Table legs
+            for (let dx of [-1.7, 1.7]) {
+                for (let dz of [-1, 1]) {
+                    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.8, 0.15), tableMat);
+                    leg.position.set(x + dx, y + 0.4, z + dz);
+                    scene.add(leg);
+                }
+            }
+            return { x, y: y + 0.88, z };
+        }
+
+        // Cup on table (bigger)
+        function createCup(x, y, z) {
+            const cupMat = new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.6 });
+            const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.35, 12), cupMat);
+            cup.position.set(x, y + 0.175, z);
+            scene.add(cup);
+        }
+
+        // Dice on tables (bigger)
+        function createDie(x, y, z) {
+            const dieMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+            const die = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), dieMat);
+            die.position.set(x, y + 0.075, z);
+            die.rotation.y = Math.random() * Math.PI;
+            scene.add(die);
+        }
+
+        // Fill MID area with couch clusters and tables (right side of hallway)
+
+        // Cluster 1 - left side of MID area
+        createBigCouch(midRoomX - 8, midRoomFloorY, midRoomZ + 2, Math.PI);
+        createBigCouch(midRoomX - 8, midRoomFloorY, midRoomZ - 4, 0);
+        createBigCouch(midRoomX - 3, midRoomFloorY, midRoomZ - 1, -Math.PI / 2);
+        const table1 = createMidTable(midRoomX - 6, midRoomFloorY, midRoomZ - 1);
+        createCup(table1.x, table1.y, table1.z);
+        createDie(table1.x + 0.5, table1.y, table1.z + 0.3);
+        createDie(table1.x - 0.4, table1.y, table1.z - 0.2);
+
+        // Cluster 2 - right side of MID area
+        createBigCouch(midRoomX + 6, midRoomFloorY, midRoomZ + 2, Math.PI);
+        createBigCouch(midRoomX + 6, midRoomFloorY, midRoomZ - 4, 0);
+        createBigCouch(midRoomX + 1, midRoomFloorY, midRoomZ - 1, Math.PI / 2);
+        createBigCouch(midRoomX + 11, midRoomFloorY, midRoomZ - 1, -Math.PI / 2);
+        const table2 = createMidTable(midRoomX + 6, midRoomFloorY, midRoomZ - 1);
+        createCup(table2.x, table2.y, table2.z);
+        createDie(table2.x + 0.6, table2.y, table2.z + 0.4);
+        createDie(table2.x - 0.5, table2.y, table2.z - 0.3);
+
+        // Beer boxes scattered around
+        function createBeerBox(x, y, z, rotY = 0) {
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+            const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.7), boxMat);
+            box.position.set(x, y + 0.35, z);
+            box.rotation.y = rotY;
+            scene.add(box);
+        }
+
+        // Beer boxes on floor around couches
+        createBeerBox(midRoomX - 10, midRoomFloorY, midRoomZ + 4, 0.3);
+        createBeerBox(midRoomX - 4, midRoomFloorY, midRoomZ - 5, -0.2);
+        createBeerBox(midRoomX + 4, midRoomFloorY, midRoomZ + 4, 0.5);
+        createBeerBox(midRoomX + 10, midRoomFloorY, midRoomZ - 5, 0.1);
+        createBeerBox(midRoomX + 8, midRoomFloorY, midRoomZ + 3, -0.4);
+        createBeerBox(midRoomX - 6, midRoomFloorY, midRoomZ + 5, 0.7);
+
+        // ============================================
         // NEON RED 3D SIGNS - Intense glowing rectangular prisms
         // ============================================
         const markers = [];
@@ -1379,15 +1492,15 @@
         // DJ Sign 1 - OUTSIDE (above tent) - TURF header
         const outsideLines = [
             '22:00 - 23:30',
-            'RODIGGER B2B MUSS',
+            'RODIZZY B2B CAYMUSSY',
             '23:30 - 1:00',
-            'VINNY B2B STIGGER'
+            'VINNY B2B STIGGY'
         ];
         const djSign1 = createDJSign('TURF', outsideLines, turfX, tentBaseHeight + tentPeakHeight + 4, turfZ, 14, 7, 1.2);
         djSign1.userData = {
             name: 'TURF',
             location: 'Outside Stage',
-            time: '22:00-23:30: RODIGGER B2B MUSS\n23:30-1:00: VINNY B2B STIGGER'
+            time: '22:00-23:30: RODIZZY B2B CAYMUSSY\n23:30-1:00: VINNY B2B STIGGY'
         };
 
         // DJ Sign 2 - INSIDE (lounge) - LOUNGE header
@@ -1410,7 +1523,11 @@
 
         // TRAP Sign - above the TV on the back wall
         const trapSign = createNarcanSign('TRAP', trapRoomX - 6, basementY + 9, trapRoomZ - 6, 6, 2.5, 0.8);
-        trapSign.userData = { name: 'TRAP ROOM', location: 'Basement', detail: 'Chill zone' };
+        trapSign.userData = { name: 'TRAP ROOM', location: 'Basement', detail: 'CHOP CENTRAL' };
+
+        // MID Sign - in the hallway above MID area
+        const midSign = createNarcanSign('MID', midRoomX, 6, baseZ, 5, 2, 0.8);
+        midSign.userData = { name: 'MID', location: 'Main Floor', detail: 'SHLEVINS' };
 
         // ============================================
         // LIGHTING - Bright outside, dark red building interiors
