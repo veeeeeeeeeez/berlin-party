@@ -1548,16 +1548,16 @@
 
         // DJ Sign 1 - OUTSIDE (above tent) - TURF header
         const outsideLines = [
-            '22:00 - 23:30',
-            'RODIZZY B2B CAYMUSSY',
-            '23:30 - 1:00',
-            'VINNY B2B STIGGY'
+            '22:00 - 0:00',
+            'RODIZZLE B2B MUZZ',
+            '0:00 - 2:00',
+            'VINNY B2B JUUL'
         ];
         const djSign1 = createDJSign('TURF', outsideLines, turfX, tentBaseHeight + tentPeakHeight + 4, turfZ, 14, 7, 1.2);
         djSign1.userData = {
             name: 'TURF',
             location: 'Outside Stage',
-            time: '22:00-23:30: RODIZZY B2B CAYMUSSY\n23:30-1:00: VINNY B2B STIGGY'
+            time: '22:00-0:00: RODIZZLE B2B MUZZ\n0:00-2:00: VINNY B2B JUUL'
         };
 
         // DJ Sign 2 - INSIDE (lounge) - LOUNGE header
@@ -1565,13 +1565,15 @@
             '22:00 - 23:30',
             'COOCHIE B2B DANNY',
             '23:30 - 1:00',
-            'WESTON B2B JOUNGER'
+            'BERKIN B2B LECHUZZ',
+            '1:00 - 2:00',
+            'WESTON'
         ];
         const djSign2 = createDJSign('LOUNGE', insideLines, sideX, 8, sideZ + 12, 12, 6, 1);
         djSign2.userData = {
             name: 'LOUNGE',
             location: 'Inside Stage',
-            time: '22:00-23:30: COOCHIE B2B DANNY\n23:30-1:00: WESTON B2B JOUNGER'
+            time: '22:00-23:30: COOCHIE B2B DANNY\n23:30-1:00: BERKIN B2B LECHUZZ\n1:00-2:00: WESTON'
         };
 
         // NARCAN Sign - above the white cross box

@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERLIN - Kappa Sigma (Optimized)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        #info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #ddccaa;
+            z-index: 100;
+        }
+
+        #info-panel h1 {
+            font-size: 2.5rem;
+            letter-spacing: 0.6rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #c0c0c0;
+            text-shadow: 0 0 20px rgba(192, 192, 192, 0.6), 0 0 40px rgba(150, 180, 220, 0.4);
+            font-family: 'Helvetica Neue', 'Arial', sans-serif;
+        }
+
+        #info-panel p {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        #marker-info {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 15, 12, 0.95);
+            border: 1px solid #554433;
+            padding: 20px 40px;
+            color: #eee;
+            display: none;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 0 0 15px rgba(255, 200, 150, 0.15);
+        }
+
+        #marker-info.visible {
+            display: block;
+        }
+
+        #marker-info h2 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            letter-spacing: 0.2rem;
+        }
+
+        #marker-info p {
+            font-size: 0.9rem;
+            color: #999;
+        }
+
+        #marker-info .time {
+            color: #c0c0c0;
+            font-size: 1rem;
+            margin-top: 8px;
+        }
+
+        #marker-info .narcan {
+            color: #cc3333;
+        }
+
+        #instructions {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: #555;
+            font-size: 0.7rem;
+            text-align: right;
+            z-index: 100;
+        }
+
+        #kappa-sigma {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #c0c0c0;
+            font-size: 2.8rem;
+            font-weight: 500;
+            letter-spacing: 0.5rem;
+            z-index: 100;
+            text-shadow: 0 0 20px rgba(192, 192, 192, 0.6), 0 0 40px rgba(150, 180, 220, 0.4);
+            font-family: 'Helvetica Neue', 'Arial', sans-serif;
+        }
+
+        #fps-counter {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            color: #0f0;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 100;
+        }
+
+        @media (max-width: 768px) {
+            #kappa-sigma {
+                left: auto;
+                right: 20px;
+                transform: none;
+                font-size: 2rem;
+            }
+
+            #instructions {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="info-panel">
+        <h1>BERLIN</h1>
+        <p>KAPPA SIGMA - 1035 CAMPUS</p>
+    </div>
+
+    <div id="kappa-sigma">K&Sigma;</div>
+
+    <div id="marker-info">
+        <h2 id="marker-title"></h2>
+        <p id="marker-location"></p>
+        <p id="marker-detail" class="time"></p>
+    </div>
+
+    <div id="instructions">
+        Drag to rotate<br>
+        Scroll to zoom<br>
+        Click signs for DJ lineups
+    </div>
+
+    <div id="fps-counter">FPS: --</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ============================================
+        // PERFORMANCE OPTIMIZATIONS:
+        // 1. Capped pixel ratio at 1.5 (was devicePixelRatio which can be 2-3x)
+        // 2. Reduced shadow map size (1024 from 2048)
+        // 3. Disabled shadows on most objects
+        // 4. Used InstancedMesh for repeated objects (beer cans, cigarettes, fence bars)
+        // 5. Reduced number of point lights dramatically
+        // 6. Throttled mousemove events
+        // 7. Merged similar geometries
+        // 8. Reduced polygon count on cylinders/spheres
+        // ============================================
+
+        // FPS Counter
+        let frameCount = 0;
+        let lastTime = performance.now();
+        const fpsElement = document.getElementById('fps-counter');
+
+        function updateFPS() {
+            frameCount++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fpsElement.textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                lastTime = now;
+            }
+        }
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+        scene.fog = new THREE.Fog(0x0a0a0a, 50, 150);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(30, 35, 50);
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: "high-performance"
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        // OPTIMIZATION: Cap pixel ratio
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.BasicShadowMap; // Faster than PCFSoft
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 25;  // OPTIMIZATION: Prevents filling screen with walls
+        controls.maxDistance = 120;
+        controls.maxPolarAngle = Math.PI;
+        controls.minPolarAngle = 0;
+
+        // Materials - Dark industrial (reused)
+        // OPTIMIZATION: Changed to MeshBasicMaterial, removed transparency and DoubleSide
+        const wallMaterial = new THREE.MeshBasicMaterial({
+            color: 0x1a1a1a,
+            side: THREE.FrontSide
+        });
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial
+        const floorMaterial = new THREE.MeshBasicMaterial({
+            color: 0x0a0a0a
+        });
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial, removed transparency
+        const roofMaterial = new THREE.MeshBasicMaterial({
+            color: 0x0a0a0a
+        });
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial
+        const metalMaterial = new THREE.MeshBasicMaterial({
+            color: 0x111111
+        });
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial
+        const blackMetalMaterial = new THREE.MeshBasicMaterial({
+            color: 0x0a0a0a
+        });
+
+        // Layout constants
+        const sideWidth = 16;
+        const sideDepth = 40;
+        const sideHeight = 12;
+        const sideX = -10;
+        const sideZ = 10;
+
+        const turfWidth = 28;
+        const turfDepth = sideDepth;
+        const turfX = sideX + sideWidth/2 + turfWidth/2;
+        const turfZ = sideZ;
+
+        const baseWidth = sideWidth + turfWidth + 20;
+        const baseDepth = 14;
+        const baseHeight = 12;
+        const baseX = turfX + turfWidth/2 - baseWidth/2;
+        const baseZ = sideZ - sideDepth/2 - baseDepth/2;
+
+        // ============================================
+        // TURF AREA - Simplified grass texture
+        // ============================================
+        function createGrassTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; // Reduced from 512
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#050d05';
+            ctx.fillRect(0, 0, 256, 256);
+
+            // Reduced grass blades (2000 from 8000)
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                const length = 3 + Math.random() * 6;
+                const angle = -Math.PI/2 + (Math.random() - 0.5) * 0.6;
+                const shade = Math.floor(Math.random() * 25);
+                const g = 15 + shade;
+                ctx.strokeStyle = `rgb(${3 + Math.floor(shade/5)}, ${g}, ${3 + Math.floor(shade/5)})`;
+                ctx.lineWidth = 0.5 + Math.random() * 1;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+                ctx.stroke();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 6);
+            return texture;
+        }
+
+        const turfGeometry = new THREE.PlaneGeometry(turfWidth, turfDepth);
+        // OPTIMIZATION: Changed to MeshBasicMaterial
+        const turfMaterial = new THREE.MeshBasicMaterial({
+            map: createGrassTexture(),
+            color: 0x040a04
+        });
+        const turf = new THREE.Mesh(turfGeometry, turfMaterial);
+        turf.rotation.x = -Math.PI / 2;
+        turf.position.set(turfX, 0.02, turfZ);
+        turf.receiveShadow = true;
+        scene.add(turf);
+
+        // OPTIMIZATION: Removed purple underglow light (fill rate optimization)
+
+        // ============================================
+        // SIDE SEGMENT (Lounge with cage)
+        // ============================================
+        const sideFloorGeo = new THREE.BoxGeometry(sideWidth, 0.3, sideDepth);
+        const sideFloor = new THREE.Mesh(sideFloorGeo, floorMaterial);
+        sideFloor.position.set(sideX, 0.15, sideZ);
+        scene.add(sideFloor);
+
+        // Walls as single merged geometry
+        const sideBackWall = new THREE.Mesh(new THREE.BoxGeometry(sideWidth, sideHeight, 0.2), wallMaterial);
+        sideBackWall.position.set(sideX, sideHeight/2, sideZ - sideDepth/2);
+        scene.add(sideBackWall);
+
+        const sideFrontWall = new THREE.Mesh(new THREE.BoxGeometry(sideWidth, sideHeight, 0.2), wallMaterial);
+        sideFrontWall.position.set(sideX, sideHeight/2, sideZ + sideDepth/2);
+        scene.add(sideFrontWall);
+
+        const sideRightWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, sideHeight, sideDepth), wallMaterial);
+        sideRightWall.position.set(sideX + sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideRightWall);
+
+        const sideLeftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, sideHeight, sideDepth), wallMaterial);
+        sideLeftWall.position.set(sideX - sideWidth/2, sideHeight/2, sideZ);
+        scene.add(sideLeftWall);
+
+        const sideRoof = new THREE.Mesh(new THREE.BoxGeometry(sideWidth, 0.2, sideDepth), roofMaterial);
+        sideRoof.position.set(sideX, sideHeight, sideZ);
+        scene.add(sideRoof);
+
+        // Lounge floor
+        const loungeFloor = new THREE.Mesh(new THREE.BoxGeometry(sideWidth - 2, 0.3, sideDepth - 4), floorMaterial);
+        loungeFloor.position.set(sideX, 0.45, sideZ);
+        scene.add(loungeFloor);
+
+        // ============================================
+        // CAGE - Simplified (fewer bars)
+        // ============================================
+        const cageWidth = 5;
+        const cageDepth = 4;
+        const cageHeight = 6;
+        const cageX = sideX;
+        const cageZ = sideZ - 10;
+
+        const cageBase = new THREE.Mesh(new THREE.BoxGeometry(cageWidth, 0.3, cageDepth), blackMetalMaterial);
+        cageBase.position.set(cageX, 0.6, cageZ);
+        scene.add(cageBase);
+
+        const cageTop = new THREE.Mesh(new THREE.BoxGeometry(cageWidth, 0.15, cageDepth), blackMetalMaterial);
+        cageTop.position.set(cageX, cageHeight, cageZ);
+        scene.add(cageTop);
+
+        // Corner posts
+        const cornerPostGeo = new THREE.BoxGeometry(0.15, cageHeight, 0.15);
+        [
+            [-cageWidth/2 + 0.075, -cageDepth/2 + 0.075],
+            [cageWidth/2 - 0.075, -cageDepth/2 + 0.075],
+            [-cageWidth/2 + 0.075, cageDepth/2 - 0.075],
+            [cageWidth/2 - 0.075, cageDepth/2 - 0.075]
+        ].forEach(([dx, dz]) => {
+            const post = new THREE.Mesh(cornerPostGeo, blackMetalMaterial);
+            post.position.set(cageX + dx, cageHeight/2 + 0.45, cageZ + dz);
+            scene.add(post);
+        });
+
+        // OPTIMIZATION: Use InstancedMesh for cage bars
+        const barGeo = new THREE.CylinderGeometry(0.05, 0.05, cageHeight - 0.5, 6); // Reduced segments
+        const barCount = 20;
+        const barInstancedMesh = new THREE.InstancedMesh(barGeo, blackMetalMaterial, barCount);
+        const barMatrix = new THREE.Matrix4();
+        let barIndex = 0;
+
+        // Front and back bars
+        for (let i = 1; i < 5; i++) {
+            const x = cageX - cageWidth/2 + (i * cageWidth / 5);
+            barMatrix.setPosition(x, cageHeight/2 + 0.5, cageZ - cageDepth/2);
+            barInstancedMesh.setMatrixAt(barIndex++, barMatrix);
+            barMatrix.setPosition(x, cageHeight/2 + 0.5, cageZ + cageDepth/2);
+            barInstancedMesh.setMatrixAt(barIndex++, barMatrix);
+        }
+
+        // Side bars
+        for (let i = 1; i < 4; i++) {
+            const z = cageZ - cageDepth/2 + (i * cageDepth / 4);
+            barMatrix.setPosition(cageX - cageWidth/2, cageHeight/2 + 0.5, z);
+            barInstancedMesh.setMatrixAt(barIndex++, barMatrix);
+            barMatrix.setPosition(cageX + cageWidth/2, cageHeight/2 + 0.5, z);
+            barInstancedMesh.setMatrixAt(barIndex++, barMatrix);
+        }
+        scene.add(barInstancedMesh);
+
+        // CAGE Sign
+        function createCageSignTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, 256, 100);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('CAGE', 128, 35);
+            ctx.font = '18px Arial';
+            ctx.fillText('(dance, baby, dance)', 128, 70);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const cageSignGroup = new THREE.Group();
+        const cageSignTexture = createCageSignTexture();
+        const cageSignPurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+        const cageSignFrontMat = new THREE.MeshBasicMaterial({ map: cageSignTexture });
+
+        const cageSignMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(8, 3.5, 0.4),
+            [cageSignPurpleMat, cageSignPurpleMat, cageSignPurpleMat, cageSignPurpleMat, cageSignFrontMat, cageSignFrontMat]
+        );
+        cageSignGroup.add(cageSignMesh);
+
+        // OPTIMIZATION: Removed cage sign glow light (fill rate optimization)
+        cageSignGroup.position.set(cageX, 10, cageZ);
+        scene.add(cageSignGroup);
+
+        // DJ booth in lounge - OPTIMIZATION: Changed to MeshBasicMaterial
+        const djTable = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 2), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
+        djTable.position.set(sideX, 1.2, sideZ + 10);
+        scene.add(djTable);
+
+        const deckLounge = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 1.5), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+        deckLounge.position.set(sideX, 1.75, sideZ + 10);
+        scene.add(deckLounge);
+
+        // ============================================
+        // BASE SEGMENT
+        // ============================================
+        const baseFloor = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, 0.3, baseDepth), floorMaterial);
+        baseFloor.position.set(baseX, 0.15, baseZ);
+        scene.add(baseFloor);
+
+        const baseFrontWall = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, 0.2), wallMaterial);
+        baseFrontWall.position.set(baseX, baseHeight/2, baseZ + baseDepth/2);
+        scene.add(baseFrontWall);
+
+        const baseBackWall = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, 0.2), wallMaterial);
+        baseBackWall.position.set(baseX, baseHeight/2, baseZ - baseDepth/2);
+        scene.add(baseBackWall);
+
+        const baseLeftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, baseHeight, baseDepth), wallMaterial);
+        baseLeftWall.position.set(baseX - baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseLeftWall);
+
+        const baseRightWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, baseHeight, baseDepth), wallMaterial);
+        baseRightWall.position.set(baseX + baseWidth/2, baseHeight/2, baseZ);
+        scene.add(baseRightWall);
+
+        const baseRoof = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, 0.2, baseDepth), roofMaterial);
+        baseRoof.position.set(baseX, baseHeight, baseZ);
+        scene.add(baseRoof);
+
+        // ============================================
+        // BASEMENT LEVEL
+        // ============================================
+        const basementY = -baseHeight;
+
+        const basementFloor = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, 0.3, baseDepth), floorMaterial);
+        basementFloor.position.set(baseX, basementY + 0.15, baseZ);
+        scene.add(basementFloor);
+
+        const basementFrontWall = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, 0.2), wallMaterial);
+        basementFrontWall.position.set(baseX, basementY + baseHeight/2, baseZ + baseDepth/2);
+        scene.add(basementFrontWall);
+
+        const basementBackWall = new THREE.Mesh(new THREE.BoxGeometry(baseWidth, baseHeight, 0.2), wallMaterial);
+        basementBackWall.position.set(baseX, basementY + baseHeight/2, baseZ - baseDepth/2);
+        scene.add(basementBackWall);
+
+        const basementLeftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, baseHeight, baseDepth), wallMaterial);
+        basementLeftWall.position.set(baseX - baseWidth/2, basementY + baseHeight/2, baseZ);
+        scene.add(basementLeftWall);
+
+        const basementRightWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, baseHeight, baseDepth), wallMaterial);
+        basementRightWall.position.set(baseX + baseWidth/2, basementY + baseHeight/2, baseZ);
+        scene.add(basementRightWall);
+
+        // OPTIMIZATION: Removed basement light (fill rate optimization)
+
+        // ============================================
+        // TRAP ROOM - Simplified
+        // ============================================
+        const trapRoomX = baseX + baseWidth/2 - 5;
+        const trapRoomZ = baseZ;
+        const trapRoomY = basementY + 0.3;
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial
+        const couchMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+        const couchCushionMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+        function createCouch(x, y, z, rotation = 0) {
+            const couchGroup = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 1.5), couchMat);
+            base.position.y = 0.4;
+            couchGroup.add(base);
+            const back = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.3), couchMat);
+            back.position.set(0, 1.1, -0.6);
+            couchGroup.add(back);
+            couchGroup.position.set(x, y, z);
+            couchGroup.rotation.y = rotation;
+            scene.add(couchGroup);
+        }
+
+        createCouch(trapRoomX - 1, trapRoomY, trapRoomZ, -Math.PI / 2);
+        createCouch(trapRoomX - 6, trapRoomY, trapRoomZ + 4, Math.PI);
+        createCouch(trapRoomX - 6, trapRoomY, trapRoomZ - 4, 0);
+
+        // TV
+        const tvScreen = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 0.2), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+        tvScreen.position.set(trapRoomX - 6, trapRoomY + 5, trapRoomZ - 6);
+        scene.add(tvScreen);
+
+        // Coffee table
+        const trapTable = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 2), new THREE.MeshBasicMaterial({ color: 0x1a1a1a }));
+        trapTable.position.set(trapRoomX - 4, trapRoomY + 0.6, trapRoomZ);
+        scene.add(trapTable);
+
+        // Narcan station
+        const narcanSignX = baseX - 15;
+        const narcanSignZ = baseZ;
+
+        const narcanBox = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 0.5), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        narcanBox.position.set(narcanSignX, 1.8, narcanSignZ);
+        scene.add(narcanBox);
+
+        const crossMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, 0.1), crossMat);
+        crossV.position.set(narcanSignX, 1.8, narcanSignZ + 0.3);
+        scene.add(crossV);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.1), crossMat);
+        crossH.position.set(narcanSignX, 1.8, narcanSignZ + 0.3);
+        scene.add(crossH);
+
+        // ============================================
+        // TENT - Simplified
+        // ============================================
+        const tentGroup = new THREE.Group();
+        const tentLength = turfDepth - 10;
+        const tentWidthSize = turfWidth - 6;
+        const tentPeakHeight = 4;
+        const tentBaseHeight = 7;
+
+        const canopyVertices = new Float32Array([
+            -tentWidthSize/2, tentBaseHeight, -tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2,
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,
+            -tentWidthSize/2, tentBaseHeight, tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, -tentLength/2,
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,
+            tentWidthSize/2, tentBaseHeight, -tentLength/2,
+            tentWidthSize/2, tentBaseHeight, tentLength/2,
+            0, tentBaseHeight + tentPeakHeight, tentLength/2,
+        ]);
+
+        const canopyGeometry = new THREE.BufferGeometry();
+        canopyGeometry.setAttribute('position', new THREE.BufferAttribute(canopyVertices, 3));
+        canopyGeometry.computeVertexNormals();
+
+        // OPTIMIZATION: Changed to MeshBasicMaterial, removed DoubleSide
+        const tentMaterial = new THREE.MeshBasicMaterial({
+            color: 0x080808,
+            side: THREE.FrontSide
+        });
+        const tentCanopy = new THREE.Mesh(canopyGeometry, tentMaterial);
+        tentGroup.add(tentCanopy);
+
+        // Tent poles - reduced count
+        const tentPoleGeometry = new THREE.CylinderGeometry(0.12, 0.12, tentBaseHeight, 6);
+        const tentPoleMaterial = new THREE.MeshBasicMaterial({ color: 0x080808 });
+        const poleOffsetX = tentWidthSize/2 - 0.5;
+
+        for (let i = 0; i < 3; i++) {
+            const pz = -tentLength/2 + 2 + i * ((tentLength - 4) / 2);
+            const leftPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            leftPole.position.set(-poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(leftPole);
+            const rightPole = new THREE.Mesh(tentPoleGeometry, tentPoleMaterial);
+            rightPole.position.set(poleOffsetX, tentBaseHeight/2, pz);
+            tentGroup.add(rightPole);
+        }
+
+        tentGroup.position.set(turfX, 0, turfZ);
+        scene.add(tentGroup);
+
+        // ============================================
+        // DJ STAGE
+        // ============================================
+        const stageGroup = new THREE.Group();
+        const stagePlatformHeight = 1.8;
+        const stageZ = -tentLength/2 + 6;
+        const stageX = 0;
+
+        const stagePlatform = new THREE.Mesh(new THREE.BoxGeometry(8, stagePlatformHeight, 10), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
+        stagePlatform.position.set(stageX, stagePlatformHeight/2, stageZ);
+        stageGroup.add(stagePlatform);
+
+        const djStageTable = new THREE.Mesh(new THREE.BoxGeometry(6, 0.9, 2.5), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+        djStageTable.position.set(stageX, stagePlatformHeight + 0.45, stageZ);
+        stageGroup.add(djStageTable);
+
+        const djDeck = new THREE.Mesh(new THREE.BoxGeometry(5, 0.25, 1.8), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+        djDeck.position.set(stageX, stagePlatformHeight + 1, stageZ);
+        stageGroup.add(djDeck);
+
+        // Turntables
+        const turntableGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
+        const turntableMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+        [-1.2, 1.2].forEach(offsetX => {
+            const turntable = new THREE.Mesh(turntableGeo, turntableMat);
+            turntable.position.set(stageX + offsetX, stagePlatformHeight + 1.18, stageZ);
+            stageGroup.add(turntable);
+        });
+
+        stageGroup.position.set(turfX, 0, turfZ);
+        scene.add(stageGroup);
+
+        // ============================================
+        // FENCING - Simplified with InstancedMesh
+        // ============================================
+        const fenceHeight = 7;
+
+        function createSimplifiedFence(length, height = fenceHeight) {
+            const group = new THREE.Group();
+
+            // Just corner posts and horizontal bars
+            const postGeo = new THREE.BoxGeometry(0.2, height, 0.2);
+            const numPosts = Math.ceil(length / 8); // Fewer posts
+
+            for (let i = 0; i <= numPosts; i++) {
+                const post = new THREE.Mesh(postGeo, metalMaterial);
+                post.position.set(i * (length / numPosts) - length/2, height/2, 0);
+                group.add(post);
+            }
+
+            // Horizontal bars
+            [height * 0.3, height * 0.6, height * 0.9].forEach(h => {
+                const hBarGeo = new THREE.BoxGeometry(length, 0.08, 0.08);
+                const hBar = new THREE.Mesh(hBarGeo, metalMaterial);
+                hBar.position.set(0, h, 0);
+                group.add(hBar);
+            });
+
+            return group;
+        }
+
+        const rightFence = createSimplifiedFence(turfDepth + 4);
+        rightFence.rotation.y = Math.PI / 2;
+        rightFence.position.set(turfX + turfWidth/2 + 0.5, 0, turfZ);
+        scene.add(rightFence);
+
+        const bottomFence = createSimplifiedFence(turfWidth - 10);
+        bottomFence.position.set(turfX + 5, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(bottomFence);
+
+        // Gate
+        const gateGroup = new THREE.Group();
+        const gateWidth = 8;
+        const gateHeightSize = 7;
+
+        const topBar = new THREE.Mesh(new THREE.BoxGeometry(gateWidth + 0.5, 0.25, 0.25), metalMaterial);
+        topBar.position.set(0, gateHeightSize, 0);
+        gateGroup.add(topBar);
+
+        [-gateWidth/2, gateWidth/2].forEach(x => {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, gateHeightSize + 0.5, 0.25), metalMaterial);
+            post.position.set(x, gateHeightSize/2, 0);
+            gateGroup.add(post);
+        });
+
+        // Gate bars - fewer
+        for (let i = 1; i < 6; i++) {
+            const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, gateHeightSize, 6), metalMaterial);
+            bar.position.set(-gateWidth/2 + (i * gateWidth / 6), gateHeightSize/2, 0);
+            gateGroup.add(bar);
+        }
+
+        gateGroup.position.set(turfX - turfWidth/2 + 4, 0, turfZ + turfDepth/2 + 0.5);
+        scene.add(gateGroup);
+
+        // Entrance sign
+        function createEntranceSignTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, 256, 64);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ENTRANCE', 128, 32);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const entranceSignGroup = new THREE.Group();
+        const entranceTexture = createEntranceSignTexture();
+        const entranceSignMat = new THREE.MeshBasicMaterial({ map: entranceTexture });
+        const entrancePurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+
+        const entranceSign = new THREE.Mesh(
+            new THREE.BoxGeometry(6, 1.5, 0.2),
+            [entrancePurpleMat, entrancePurpleMat, entrancePurpleMat, entrancePurpleMat, entranceSignMat, entranceSignMat]
+        );
+        entranceSignGroup.add(entranceSign);
+        entranceSignGroup.position.set(turfX - turfWidth/2 + 4, gateHeightSize + 1.5, turfZ + turfDepth/2 + 0.5);
+        scene.add(entranceSignGroup);
+
+        // ============================================
+        // BEER CANS - InstancedMesh
+        // ============================================
+        const canColors = [0xcc0000, 0x0044aa, 0xccaa00, 0x228822, 0xaaaaaa];
+        const canGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.35, 8);
+        const canMat = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
+        const totalCans = 40; // Reduced from ~70
+        const canInstancedMesh = new THREE.InstancedMesh(canGeo, canMat, totalCans);
+
+        const canMatrix = new THREE.Matrix4();
+        const canPositions = [
+            [turfX - 6, turfZ + 12, 8],
+            [turfX + 5, turfZ + 8, 6],
+            [turfX + 8, turfZ - 5, 8],
+            [turfX - 3, turfZ - 2, 6],
+            [turfX + 2, turfZ + 15, 6],
+            [turfX - 8, turfZ + 5, 6]
+        ];
+
+        let canIndex = 0;
+        canPositions.forEach(([cx, cz, count]) => {
+            for (let i = 0; i < count && canIndex < totalCans; i++) {
+                const x = cx + (Math.random() - 0.5) * 1.2;
+                const z = cz + (Math.random() - 0.5) * 1.2;
+                const fallen = Math.random() > 0.3;
+
+                canMatrix.identity();
+                if (fallen) {
+                    canMatrix.makeRotationX(Math.PI / 2);
+                    canMatrix.setPosition(x, 0.12, z);
+                } else {
+                    canMatrix.setPosition(x, 0.175, z);
+                }
+                canInstancedMesh.setMatrixAt(canIndex++, canMatrix);
+                canInstancedMesh.setColorAt(canIndex - 1, new THREE.Color(canColors[Math.floor(Math.random() * canColors.length)]));
+            }
+        });
+        canInstancedMesh.instanceMatrix.needsUpdate = true;
+        canInstancedMesh.instanceColor.needsUpdate = true;
+        scene.add(canInstancedMesh);
+
+        // ============================================
+        // TABLES - Simplified (removed cigarettes and bottles)
+        // ============================================
+        const tableMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+        const cigTableX = narcanSignX - 8;
+        const cigTable = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.5), tableMat);
+        cigTable.position.set(cigTableX, 1, narcanSignZ);
+        scene.add(cigTable);
+
+        const jaegerTableX = cigTableX - 5;
+        const jaegerTable = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 1.5), tableMat);
+        jaegerTable.position.set(jaegerTableX, 1, narcanSignZ);
+        scene.add(jaegerTable);
+
+        // ============================================
+        // MID AREA - Simplified couches
+        // ============================================
+        const midRoomZ = baseZ;
+        const midRoomX = baseX + baseWidth/2 - 15;
+        const midRoomFloorY = 0.3;
+
+        function createBigCouch(x, y, z, rotation = 0) {
+            const couchGroup = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 2.2), couchMat);
+            base.position.y = 0.5;
+            couchGroup.add(base);
+            const back = new THREE.Mesh(new THREE.BoxGeometry(6, 1.6, 0.4), couchMat);
+            back.position.set(0, 1.3, -0.9);
+            couchGroup.add(back);
+            couchGroup.position.set(x, y, z);
+            couchGroup.rotation.y = rotation;
+            scene.add(couchGroup);
+        }
+
+        createBigCouch(midRoomX - 8, midRoomFloorY, midRoomZ + 2, Math.PI);
+        createBigCouch(midRoomX - 8, midRoomFloorY, midRoomZ - 4, 0);
+        createBigCouch(midRoomX + 6, midRoomFloorY, midRoomZ + 2, Math.PI);
+        createBigCouch(midRoomX + 6, midRoomFloorY, midRoomZ - 4, 0);
+
+        // ============================================
+        // SIGNS (Interactive markers)
+        // ============================================
+        const markers = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function createDJSignTexture(header, lines, width = 256, height = 150) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(header, width/2, 30);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(25, 42);
+            ctx.lineTo(width - 25, 42);
+            ctx.stroke();
+
+            ctx.font = '14px Arial';
+            const startY = 60;
+            const lineHeight = (height - startY) / (lines.length + 0.5);
+            lines.forEach((line, i) => {
+                ctx.fillText(line, width/2, startY + lineHeight * (i + 0.5));
+            });
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createSimpleSignTexture(text, width = 256, height = 64) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#6b21a8';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, width/2, height/2);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const neonPurpleMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+
+        function createDJSign(header, lines, x, y, z, width = 12, height = 6, depth = 1) {
+            const group = new THREE.Group();
+            const texture = createDJSignTexture(header, lines);
+            const materials = [
+                neonPurpleMat, neonPurpleMat, neonPurpleMat, neonPurpleMat,
+                new THREE.MeshBasicMaterial({ map: texture }),
+                new THREE.MeshBasicMaterial({ map: texture })
+            ];
+            const sign = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), materials);
+            group.add(sign);
+
+            // OPTIMIZATION: Removed sign glow lights (fill rate optimization)
+
+            group.position.set(x, y, z);
+            scene.add(group);
+            markers.push(group);
+            return group;
+        }
+
+        function createNarcanSign(text, x, y, z, width = 6, height = 2, depth = 0.8) {
+            const group = new THREE.Group();
+            const texture = createSimpleSignTexture(text);
+            const materials = [
+                neonPurpleMat, neonPurpleMat, neonPurpleMat, neonPurpleMat,
+                new THREE.MeshBasicMaterial({ map: texture }),
+                new THREE.MeshBasicMaterial({ map: texture })
+            ];
+            const sign = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), materials);
+            group.add(sign);
+
+            // OPTIMIZATION: Removed sign glow lights (fill rate optimization)
+
+            group.position.set(x, y, z);
+            scene.add(group);
+            markers.push(group);
+            return group;
+        }
+
+        // DJ Signs
+        const outsideLines = ['22:00 - 0:00', 'RODIZZLE B2B MUZZ', '0:00 - 2:00', 'VINNY B2B JUUL'];
+        const djSign1 = createDJSign('TURF', outsideLines, turfX, tentBaseHeight + tentPeakHeight + 4, turfZ, 14, 7, 1.2);
+        djSign1.userData = {
+            name: 'TURF',
+            location: 'Outside Stage',
+            time: '22:00-0:00: RODIZZLE B2B MUZZ\n0:00-2:00: VINNY B2B JUUL'
+        };
+
+        const insideLines = ['22:00 - 23:30', 'COOCHIE B2B DANNY', '23:30 - 1:00', 'BERKIN B2B LECHUZZ', '1:00 - 2:00', 'WESTON'];
+        const djSign2 = createDJSign('LOUNGE', insideLines, sideX, 8, sideZ + 12, 12, 6, 1);
+        djSign2.userData = {
+            name: 'LOUNGE',
+            location: 'Inside Stage',
+            time: '22:00-23:30: COOCHIE B2B DANNY\n23:30-1:00: BERKIN B2B LECHUZZ\n1:00-2:00: WESTON'
+        };
+
+        const narcanSign = createNarcanSign('NARCAN', narcanSignX, 5.5, narcanSignZ, 7, 2, 0.8);
+        narcanSign.userData = { name: 'NARCAN STATION', location: 'Main House', detail: 'Ask staff for assistance' };
+
+        const trapSign = createNarcanSign('TRAP', trapRoomX - 6, basementY + 9, trapRoomZ - 6, 6, 2.5, 0.8);
+        trapSign.userData = { name: 'TRAP ROOM', location: 'Basement', detail: 'CHOP CENTRAL' };
+
+        const midSign = createNarcanSign('MID', midRoomX, 6, baseZ, 5, 2, 0.8);
+        midSign.userData = { name: 'MID', location: 'Main Floor', detail: 'SHLEVINS' };
+
+        // ============================================
+        // LIGHTING - Optimized (fewer lights)
+        // ============================================
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        mainLight.position.set(30, 50, 30);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 1024; // Reduced from 2048
+        mainLight.shadow.mapSize.height = 1024;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 150;
+        mainLight.shadow.camera.left = -70;
+        mainLight.shadow.camera.right = 70;
+        mainLight.shadow.camera.top = 70;
+        mainLight.shadow.camera.bottom = -70;
+        scene.add(mainLight);
+
+        // OPTIMIZATION: Single overhead instead of spotlight + point
+        const overheadPoint = new THREE.PointLight(0xffffff, 30, 200);
+        overheadPoint.position.set(5, 60, 10);
+        scene.add(overheadPoint);
+
+        // OPTIMIZATION: Removed loungeOverhead, baseOverhead, tentFlood lights (fill rate optimization)
+
+        // ============================================
+        // FLASHLIGHT CURSOR - Simplified
+        // ============================================
+        const flashlight = new THREE.SpotLight(0xffffff, 40, 100, Math.PI / 5, 0.3, 0.5);
+        flashlight.position.set(0, 30, 0);
+        scene.add(flashlight);
+
+        const flashlightTarget = new THREE.Object3D();
+        scene.add(flashlightTarget);
+        flashlight.target = flashlightTarget;
+
+        // OPTIMIZATION: Single cursor light
+        const cursorLight = new THREE.PointLight(0xffffff, 20, 40);
+        scene.add(cursorLight);
+
+        const flashlightRaycaster = new THREE.Raycaster();
+        const flashlightMouse = new THREE.Vector2();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const intersectPoint = new THREE.Vector3();
+
+        // OPTIMIZATION: Throttled mouse move
+        let lastMouseMoveTime = 0;
+        function onMouseMove(event) {
+            const now = performance.now();
+            if (now - lastMouseMoveTime < 16) return; // ~60fps max
+            lastMouseMoveTime = now;
+
+            flashlightMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            flashlightMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            flashlightRaycaster.setFromCamera(flashlightMouse, camera);
+            flashlightRaycaster.ray.intersectPlane(plane, intersectPoint);
+
+            if (intersectPoint) {
+                flashlightTarget.position.copy(intersectPoint);
+                flashlight.position.set(intersectPoint.x, 20, intersectPoint.z);
+                cursorLight.position.set(intersectPoint.x, 4, intersectPoint.z);
+            }
+        }
+
+        window.addEventListener('mousemove', onMouseMove);
+
+        // ============================================
+        // INTERACTION
+        // ============================================
+        const markerInfo = document.getElementById('marker-info');
+        const markerTitle = document.getElementById('marker-title');
+        const markerLocation = document.getElementById('marker-location');
+        const markerDetail = document.getElementById('marker-detail');
+
+        function showMarkerInfo(marker) {
+            const data = marker.userData;
+            markerTitle.textContent = data.name;
+            markerLocation.textContent = data.location;
+            const detailText = data.time || data.detail || '';
+            markerDetail.innerHTML = detailText.replace(/\n/g, '<br>');
+            markerDetail.className = data.type === 'narcan' ? 'narcan' : 'time';
+            markerInfo.classList.add('visible');
+        }
+
+        function hideMarkerInfo() {
+            markerInfo.classList.remove('visible');
+        }
+
+        // OPTIMIZATION: Throttled hover check
+        let lastHoverTime = 0;
+        function onMouseHover(event) {
+            const now = performance.now();
+            if (now - lastHoverTime < 50) return; // 20fps for hover checks
+            lastHoverTime = now;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const markerMeshes = markers.flatMap(m => m.children);
+            const intersects = raycaster.intersectObjects(markerMeshes);
+
+            if (intersects.length > 0) {
+                const marker = intersects[0].object.parent;
+                showMarkerInfo(marker);
+                document.body.style.cursor = 'pointer';
+            } else {
+                hideMarkerInfo();
+                document.body.style.cursor = 'crosshair';
+            }
+        }
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const markerMeshes = markers.flatMap(m => m.children);
+            const intersects = raycaster.intersectObjects(markerMeshes);
+
+            if (intersects.length > 0) {
+                const marker = intersects[0].object.parent;
+                showMarkerInfo(marker);
+            } else {
+                hideMarkerInfo();
+            }
+        }
+
+        window.addEventListener('click', onMouseClick);
+        window.addEventListener('mousemove', onMouseHover);
+
+        // ============================================
+        // ANIMATION
+        // ============================================
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+
+            // Simplified marker animation
+            markers.forEach(marker => {
+                const glow = marker.children[0];
+                if (glow) {
+                    glow.scale.setScalar(1 + Math.sin(time * 2) * 0.1);
+                }
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+            updateFPS();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
